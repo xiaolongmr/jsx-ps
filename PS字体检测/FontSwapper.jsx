@@ -5,16 +5,21 @@
 // 3. 可以按文档顺序、字体分组、使用频率等方式排序显示
 // 4. 提供友好的字体显示名称
 // 5. 支持保存用户偏好设置
+// 6. 支持撤销最近一次字体替换操作
+// 7. 支持自定义显示顺序和格式
 // 
 // 使用方法:
 // 1. 在 Photoshop 中打开需要处理的 PSD 文件
 // 2. 运行此脚本
 // 3. 在弹出的界面中查看字体信息或进行替换操作
+// 4. 点击设置按钮可自定义显示格式和顺序
+// 5. 点击撤销按钮可恢复上一次替换操作
 //
-// 作者网站: www.z-l.top
+// 作者网站: https://blog.z-l.top/
 // 首发网站：https://getquicker.net/Sharedaction?code=6471ed9b-8254-443d-0267-08ddf9bab61f
-// 版本: 2.0
-// 最后更新: 2025.9.27
+// GitHub: https://github.com/xiaolongmr/jsx-ps
+// 版本: 2.2
+// 最后更新: 2025.10.20
 
 #target photoshop
 app.bringToFront();
@@ -554,6 +559,11 @@ app.bringToFront();
                     // 保持选择在新位置
                     orderListBox.selection = selectedIndex - 1;
                     updateOrderListState(); // 更新按钮状态
+
+                    // 实时更新主面板的文本区域显示
+                    if (typeof refreshFontList === 'function') {
+                        refreshFontList();
+                    }
                 }
             };
 
@@ -573,6 +583,11 @@ app.bringToFront();
                     // 保持选择在新位置
                     orderListBox.selection = selectedIndex + 1;
                     updateOrderListState(); // 更新按钮状态
+
+                    // 实时更新主面板的文本区域显示
+                    if (typeof refreshFontList === 'function') {
+                        refreshFontList();
+                    }
                 }
             };
 
@@ -585,11 +600,11 @@ app.bringToFront();
                     var orderType = displayOrder[i];
 
                     if (orderType === "friendly" && friendlyCheckbox.value) {
-                        parts.push("微软雅黑");
+                        parts.push("(微软雅黑)");
                     } else if (orderType === "content" && contentCheckbox.value) {
-                        parts.push("(文字内容)");
+                        parts.push("[文字内容]");
                     } else if (orderType === "postscript" && psCheckbox.value) {
-                        parts.push("[MicrosoftYaHei]");
+                        parts.push("(MicrosoftYaHei)");
                     }
                 }
 
@@ -612,16 +627,28 @@ app.bringToFront();
                 updateOrderList(); // 重新构建显示顺序列表
                 updateOrderListState(); // 更新按钮状态
                 updatePreview(); // 更新预览
+                // 实时更新主面板的文本区域显示
+                if (typeof refreshFontList === 'function') {
+                    refreshFontList();
+                }
             };
             contentCheckbox.onClick = function () {
                 updateOrderList(); // 重新构建显示顺序列表
                 updateOrderListState(); // 更新按钮状态
                 updatePreview(); // 更新预览
+                // 实时更新主面板的文本区域显示
+                if (typeof refreshFontList === 'function') {
+                    refreshFontList();
+                }
             };
             psCheckbox.onClick = function () {
                 updateOrderList(); // 重新构建显示顺序列表
                 updateOrderListState(); // 更新按钮状态
                 updatePreview(); // 更新预览
+                // 实时更新主面板的文本区域显示
+                if (typeof refreshFontList === 'function') {
+                    refreshFontList();
+                }
             };
 
             // 图层排序方式设置
@@ -942,8 +969,11 @@ app.bringToFront();
         var selectionStatsText = selectionStatsGroup.add("statictext", undefined, "📊 已选中 0 个文字图层，包含 0 种字体");
         selectionStatsText.preferredSize = [400, 20];
 
+        // 撤销历史记录数组
+        var undoHistory = []; // 存储图层操作历史，用于撤销功能
+
         // 控制台日志（根据设置显示/隐藏）
-        var logGroup, logTitle, logText;
+        var logGroup, logTitle, logText, undoBtn;
 
         // 创建控制台日志组件的函数
         function createLogGroup() {
@@ -952,7 +982,41 @@ app.bringToFront();
                 logGroup.orientation = "column";
                 logGroup.alignChildren = "fill";
 
-                logTitle = logGroup.add("statictext", undefined, "📋 控制台日志:");
+                // 日志标题和撤销按钮在同一行
+                var logHeaderGroup = logGroup.add("group");
+                logHeaderGroup.orientation = "row";
+                logHeaderGroup.alignment = "fill";
+
+                // 左侧标题
+                logTitle = logHeaderGroup.add("statictext", undefined, "📋 控制台日志:");
+                logTitle.alignment = ["left", "center"];
+
+                // 右侧撤销按钮
+                undoBtn = logHeaderGroup.add("button", undefined, "↩ 撤回上一步");
+                undoBtn.alignment = ["right", "center"];
+                undoBtn.helpTip = "撤销上一次字体替换操作";
+                undoBtn.onClick = function () {
+                    // 检查是否有可撤销的操作
+                    if (!undoHistory.length) { logText && (logText.text += "⚠️ 已经撤回完所有操作了\n"); return; }
+
+                    // 获取并移除最后一次操作记录
+                    var lastOperation = undoHistory.pop();
+
+                    // 执行撤销：恢复所有图层的原始字体
+                    for (var i = 0; i < lastOperation.layers.length; i++) {
+                        try { lastOperation.layers[i].layer.textItem.font = lastOperation.layers[i].oldFont; }
+                        catch (e) { } // 静默处理错误
+                    }
+
+                    // 从日志中移除对应记录
+                    if (logText) {
+                        var logLines = logText.text.split("\n");
+                        var linesToRemove = lastOperation.logLines.length || lastOperation.logLines;
+                        while (linesToRemove-- > 0 && logLines.length > 0) logLines.pop();
+                        logText.text = logLines.join("\n");
+                    }
+                };
+
                 logText = logGroup.add("edittext", undefined, "", { multiline: true, readonly: true });
                 logText.preferredSize = [500, 150];
             }
@@ -965,6 +1029,7 @@ app.bringToFront();
                 logGroup = null;
                 logTitle = null;
                 logText = null;
+                undoBtn = null;
             }
         }
 
@@ -990,6 +1055,7 @@ app.bringToFront();
         function replaceFont(layers, newFontPS, logText) {
             var count = 0;
             var logMessages = [];
+            var operationLayers = [];
 
             // 获取新字体的友好名称
             var newFontFriendly = getFriendlyFontName(newFontPS) || newFontPS;
@@ -999,6 +1065,9 @@ app.bringToFront();
                     var oldFontPS = layers[i].textItem.font;
                     var oldFontFriendly = getFriendlyFontName(oldFontPS) || oldFontPS;
 
+                    // 记录操作前的状态，用于撤销
+                    operationLayers.push({ layer: layers[i], oldFont: oldFontPS });
+
                     layers[i].textItem.font = newFontPS;
                     count++;
                     logMessages.push("✓ 已替换图层：" + layers[i].name + " [" + oldFontFriendly + " → " + newFontFriendly + "]");
@@ -1007,11 +1076,15 @@ app.bringToFront();
                 }
             }
 
-            // 将日志消息添加到文本框（仅在logText存在时）
+            // 记录操作历史，用于撤销
+            if (operationLayers.length > 0) {
+                undoHistory.push({ layers: operationLayers, logLines: logMessages });
+            }
+
+            // 添加日志记录（仅在logText存在时）
             if (logMessages.length > 0 && logText) {
                 var currentText = logText.text;
-                var newText = logMessages.join("\n");
-                logText.text = currentText ? currentText + "\n" + newText : newText;
+                logText.text = currentText ? currentText + "\n" + logMessages.join("\n") : logMessages.join("\n");
             }
 
             return count;
@@ -1122,7 +1195,7 @@ app.bringToFront();
                     if (orderType === "friendly" && showFriendlyName) {
                         // 使用已定义的friendlyName变量，避免重复调用getFriendlyFontName
                         if (friendlyName) {
-                            displayParts.push(friendlyName);
+                            displayParts.push("(" + friendlyName + ")");
                         }
                     } else if (orderType === "content" && showLayerContent) {
                         try {
@@ -1132,15 +1205,15 @@ app.bringToFront();
                                 textContent = textContent.substring(0, 20) + "...";
                             }
                             if (textContent) {
-                                displayParts.push("(" + textContent + ")");
+                                displayParts.push("[" + textContent + "]");
                             }
                         } catch (e) {
                             // 如果获取文字内容失败，使用图层名称作为备选
-                            displayParts.push("(" + layer.name + ")");
+                            displayParts.push("[" + layer.name + "]");
                         }
                     } else if (orderType === "postscript" && showPostScriptName) {
                         if (psName) {
-                            displayParts.push("[" + psName + "]");
+                            displayParts.push("(" + psName + ")");
                         }
                     }
                 }
@@ -1151,7 +1224,7 @@ app.bringToFront();
                     displayText = displayParts.join(" ");
                 } else {
                     // 如果没有任何显示内容，使用友好字体名称和图层名称作为默认格式
-                    displayText = friendlyName + " (" + layer.name + ")";
+                    displayText = "(" + friendlyName + ") [" + layer.name + "]";
                 }
 
                 fontList.add("item", displayText);
