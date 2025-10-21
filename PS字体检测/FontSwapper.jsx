@@ -29,7 +29,7 @@ app.bringToFront();
     var fontData = null; // 存储字体数据的全局变量
     var fontDataVersion = null; // 存储字体数据版本
     var fontDataFile = null; // 字体数据文件路径
-    var githubFontDataUrl = "https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/猫啃网免费字体合集.json"; // GitHub字体数据URL（用户需要替换为实际URL）
+    var githubFontDataUrl = "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS%E5%AD%97%E4%BD%93%E6%A3%80%E6%B5%8B/%E7%8C%AB%E5%95%83%E7%BD%91%E5%85%8D%E8%B4%B9%E5%AD%97%E4%BD%93%E5%90%88%E9%9B%86.json" //"https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/PS字体检测/猫啃网免费字体合集.json"; // GitHub字体数据URL（用户需要替换为实际URL）
 
     // ======================================================
     // 辅助函数模块 - 包含通用工具函数
@@ -121,8 +121,10 @@ app.bringToFront();
                     showScriptWarning = settings.showScriptWarning !== undefined ? settings.showScriptWarning : false;
                     displayOrder = settings.displayOrder || ["friendly", "content"];
                     enableCommercialCheck = settings.enableCommercialCheck !== undefined ? settings.enableCommercialCheck : true;
-                    githubFontDataUrl = settings.githubFontDataUrl || "https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/猫啃网免费字体合集.json";
+                    githubFontDataUrl = settings.githubFontDataUrl || "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS%E5%AD%97%E4%BD%93%E6%A3%80%E6%B5%8B/%E7%8C%AB%E5%95%83%E7%BD%91%E5%85%8D%E8%B4%B9%E5%AD%97%E4%BD%93%E5%90%88%E9%9B%86.json";
                     fontDataVersion = settings.fontDataVersion || null;
+                    customCommercialStatus = settings.customCommercialStatus || "✅ "; // 加载自定义可商用状态显示
+                    customUnknownStatus = settings.customUnknownStatus || "❓ "; // 加载自定义未知状态显示
                     return true;
                 }
             }
@@ -138,111 +140,202 @@ app.bringToFront();
         showPostScriptName = false;
         showScriptWarning = false;
         enableCommercialCheck = true;
-        githubFontDataUrl = "https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/猫啃网免费字体合集.json";
+        githubFontDataUrl = "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS%E5%AD%97%E4%BD%93%E6%A3%80%E6%B5%8B/%E7%8C%AB%E5%95%83%E7%BD%91%E5%85%8D%E8%B4%B9%E5%AD%97%E4%BD%93%E5%90%88%E9%9B%86.json";
         fontDataVersion = null;
         displayOrder = ["friendly", "content"];
+        customCommercialStatus = "✅ "; // 可商用默认显示
+        customUnknownStatus = "❓ "; // 未知默认显示
         return false;
     }
 
     // ====================== 字体数据管理函数 ======================
-    // 加载字体数据函数
+    // 加载字体数据函数 - 改进版，增加日志记录和多位置加载策略
     function loadFontData() {
+        logMessage("开始加载字体数据...");
+
+        // 记录文件路径信息以便调试
+        logMessage("配置的用户目录字体数据文件路径: " + fontDataFile.fsName);
+
+        // 1. 首先尝试从脚本所在目录读取（作为最可靠的来源）
         try {
-            // 首先尝试从本地文件加载
+            var scriptDir = new File($.fileName).parent;
+            var scriptDirPath = scriptDir.fsName;
+            logMessage("脚本所在目录: " + scriptDirPath);
+
+            // 构建脚本目录中字体数据文件的路径
+            var scriptDirFontDataPath = scriptDirPath + "/猫啃网免费字体合集.json";
+            // 确保路径格式正确
+            scriptDirFontDataPath = scriptDirFontDataPath.replace(/\\/g, "/");
+            logMessage("尝试从脚本目录读取: " + scriptDirFontDataPath);
+
+            var scriptDirFontData = new File(scriptDirFontDataPath);
+
+            if (scriptDirFontData.exists) {
+                logMessage("发现脚本目录中的字体数据文件");
+                scriptDirFontData.open("r");
+                var localJsonContent = scriptDirFontData.read();
+                scriptDirFontData.close();
+
+                if (localJsonContent && localJsonContent.length > 0) {
+                    logMessage("成功读取脚本目录中的字体数据文件，大小: " + localJsonContent.length + " 字节");
+
+                    // 尝试解析JSON
+                    fontData = eval("(" + localJsonContent + ")");
+                    fontDataVersion = fontData.version || "unknown";
+                    logMessage("字体数据解析成功，共包含 " + (fontData.length || 0) + " 个字体信息，版本: " + fontDataVersion);
+
+                    // 强制复制到用户目录
+                    try {
+                        logMessage("尝试复制字体数据到用户目录...");
+                        var parentFolder = fontDataFile.parent;
+                        logMessage("用户目录父文件夹: " + parentFolder.fsName);
+
+                        // 确保目录存在 - 使用递归创建以确保所有父目录都被创建
+                        if (!parentFolder.exists) {
+                            logMessage("用户目录父文件夹不存在，尝试创建...");
+                            parentFolder.create("DIRECTORY", true); // true表示递归创建所有父目录
+                            logMessage("用户目录父文件夹创建" + (parentFolder.exists ? "成功" : "失败"));
+                        }
+
+                        // 写入文件
+                        fontDataFile.open("w");
+                        fontDataFile.write(localJsonContent);
+                        fontDataFile.close();
+
+                        // 验证是否写入成功
+                        if (fontDataFile.exists) {
+                            logMessage("字体数据成功复制到用户目录: " + fontDataFile.fsName);
+                        } else {
+                            logMessage("警告: 字体数据文件似乎已写入，但文件检查显示不存在");
+                        }
+                    } catch (copyError) {
+                        logMessage("复制字体数据到用户目录失败: " + copyError.toString());
+                        // 即使复制失败，仍然使用脚本目录的数据
+                    }
+
+                    return true;
+                } else {
+                    logMessage("脚本目录中的字体数据文件内容为空");
+                }
+            } else {
+                logMessage("脚本目录中未找到字体数据文件");
+            }
+        } catch (e) {
+            logMessage("从脚本目录加载字体数据时发生错误: " + e.toString());
+        }
+
+        // 2. 尝试从用户目录加载（原始逻辑）
+        try {
             if (fontDataFile.exists) {
+                logMessage("发现用户目录中的字体数据文件，尝试加载...");
                 fontDataFile.open("r");
                 var jsonContent = fontDataFile.read();
                 fontDataFile.close();
 
-                if (jsonContent) {
+                if (jsonContent && jsonContent.length > 0) {
                     fontData = eval("(" + jsonContent + ")");
-                    // 从JSON中提取版本信息（如果有的话）
                     fontDataVersion = fontData.version || "unknown";
-                    logMessage("字体数据加载成功，共包含 " + (fontData.length || 0) + " 个字体信息");
+                    logMessage("字体数据从用户目录加载成功，共包含 " + (fontData.length || 0) + " 个字体信息");
                     return true;
+                } else {
+                    logMessage("用户目录中的字体数据文件内容为空");
                 }
+            } else {
+                logMessage("用户目录中未找到字体数据文件");
             }
         } catch (e) {
-            logMessage("加载字体数据失败: " + e.toString());
+            logMessage("从用户目录加载字体数据时发生错误: " + e.toString());
         }
 
-        // 如果本地加载失败，尝试从G盘原始位置复制
+        // 3. 尝试从GitHub URL下载（改进版）
+        logMessage("尝试从GitHub URL直接下载字体数据...");
         try {
-            var originalFontDataFile = new File("g:\\桌面\\jsx-ps\\PS字体检测\\猫啃网免费字体合集.json");
-            if (originalFontDataFile.exists) {
-                // 确保目标文件夹存在
-                var parentFolder = fontDataFile.parent;
-                if (!parentFolder.exists) {
-                    parentFolder.create();
+            if (githubFontDataUrl) {
+                logMessage("下载URL: " + githubFontDataUrl);
+
+                // 使用XMLHttpRequest获取远程JSON文件
+                var xhr = new XMLHttpRequest();
+                xhr.open("GET", githubFontDataUrl, false); // 同步请求
+                xhr.overrideMimeType("application/json");
+
+                // 设置超时（5秒）
+                xhr.timeout = 5000;
+
+                xhr.send();
+                logMessage("HTTP请求完成，状态码: " + xhr.status);
+
+                if (xhr.status === 200) {
+                    var remoteContent = xhr.responseText;
+                    logMessage("成功下载字体数据，大小: " + remoteContent.length + " 字节");
+
+                    // 尝试解析远程JSON
+                    fontData = eval("(" + remoteContent + ")");
+                    fontDataVersion = fontData.version || "unknown";
+                    logMessage("远程字体数据解析成功");
+
+                    // 尝试保存到用户目录
+                    try {
+                        var parentFolder = fontDataFile.parent;
+                        // 使用递归创建以确保所有父目录都被创建
+                        if (!parentFolder.exists) {
+                            logMessage("创建用户目录结构...");
+                            parentFolder.create("DIRECTORY", true);
+                        }
+
+                        fontDataFile.open("w");
+                        fontDataFile.write(remoteContent);
+                        fontDataFile.close();
+
+                        // 验证保存是否成功
+                        logMessage("尝试保存到用户目录后，文件是否存在: " + fontDataFile.exists);
+                        logMessage("成功从GitHub下载并保存字体数据");
+                    } catch (saveError) {
+                        logMessage("保存下载的字体数据失败: " + saveError.toString());
+                        // 即使保存失败，也使用下载的数据
+                    }
+
+                    return true;
+                } else {
+                    logMessage("从GitHub获取字体数据失败，HTTP状态码: " + xhr.status + ", 状态文本: " + xhr.statusText);
                 }
-
-                // 复制文件
-                originalFontDataFile.copy(fontDataFile);
-                logMessage("已从原始位置复制字体数据文件");
-
-                // 重新加载
-                return loadFontData();
+            } else {
+                logMessage("未配置GitHub字体数据URL");
             }
         } catch (e) {
-            logMessage("复制字体数据文件失败: " + e.toString());
+            logMessage("下载字体数据时出错: " + e.toString() + ", 错误名称: " + e.name);
         }
 
         logMessage("无法加载字体数据，可商用检测功能将不可用");
         return false;
     }
 
-    // 检查字体是否可商用
-    function checkCommercialUse(fontName) {
-        try {
-            if (!fontData || !fontData.length) {
-                return undefined; // 数据未加载，返回undefined表示未知
-            }
-
-            // 标准化字体名称进行比较（去除字重信息等）
-            var normalizedFontName = normalizeFontName(fontName);
-
-            // 遍历字体数据查找匹配项
-            for (var i = 0; i < fontData.length; i++) {
-                var font = fontData[i];
-                // 直接使用fontPsName进行比较，因为它已经是不含字重的格式
-                var dataFontName = font.fontPsName || "";
-                if (dataFontName && normalizedFontName === dataFontName) {
-                    // 检查license是否存在且为可商用许可证
-                    var license = font.fonts[0] && font.fonts[0].license;
-                    if (license && license.value) {
-                        // 常见的可商用许可证类型
-                        var commercialLicenses = ["OFL", "MIT", "Apache", "CC0", "BSD", "商业", "可商用"];
-                        for (var j = 0; j < commercialLicenses.length; j++) {
-                            if (license.value.indexOf(commercialLicenses[j]) !== -1) {
-                                return true; // 可商用
-                            }
-                        }
-                        // 如果不是常见的可商用许可证，但存在许可证信息
-                        return true; // 猫啃网的字体默认认为是可商用的
-                    }
-                }
-            }
-
-            return undefined; // 未找到匹配的字体信息，返回undefined表示未知
-        } catch (e) {
-            logMessage("检查字体商用状态时出错: " + e.toString());
-            return undefined; // 出错时返回undefined表示未知
-        }
-    }
 
     // 标准化字体名称（去除字重信息等）
     function normalizeFontName(fontName) {
+        if (!fontName) return "";
+
         // 简单的标准化：去除常见的字重描述词
         var weightKeywords = ["Bold", "Regular", "Italic", "Light", "Medium", "Heavy", "Thin",
-            "黑", "常规", "斜体", "细体", "中等", "粗体", "加粗", "轻型"];
+            "Black", "SemiBold", "ExtraBold", "UltraBold", "Book", "Roman", "Oblique",
+            "黑", "常规", "斜体", "细体", "中等", "粗体", "加粗", "轻型", "黑体", "宋体", "楷体", "仿宋"];
 
         var normalized = fontName;
         for (var i = 0; i < weightKeywords.length; i++) {
-            var regex = new RegExp("\\s*" + weightKeywords[i] + "\\s*", "gi");
+            // 使用更安全的正则表达式，避免特殊字符问题
+            var keyword = weightKeywords[i];
+            // 转义正则表达式特殊字符
+            var escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            var regex = new RegExp("\\s*" + escapedKeyword + "\\s*", "gi");
             normalized = normalized.replace(regex, "");
         }
 
-        // 去除多余空格
+        // 去除多余空格和特殊字符
+        normalized = normalized.trim();
+        // 去除常见的分隔符
+        normalized = normalized.replace(/[-_\/\\]/g, " ");
+        // 合并多个空格为一个
+        normalized = normalized.replace(/\s+/g, " ");
+
         return normalized.trim();
     }
 
@@ -291,50 +384,88 @@ app.bringToFront();
         return obj.toString();
     }
 
-    // 检查字体数据更新函数
+    // 检查字体数据更新函数 - 改进版，增加日志记录和可靠的文件保存机制
     function checkFontDataUpdate() {
+        logMessage("开始检查字体数据更新...");
         try {
             if (!githubFontDataUrl) {
                 logMessage("未设置GitHub字体数据URL，跳过更新检查");
                 return false;
             }
 
-            // 使用XMLHttpRequest获取远程JSON文件的前几行，只需要版本信息
+            logMessage("更新检查URL: " + githubFontDataUrl);
+            // 使用XMLHttpRequest获取远程JSON文件
             var xhr = new XMLHttpRequest();
             xhr.open("GET", githubFontDataUrl, false); // 同步请求
             xhr.overrideMimeType("application/json");
+            xhr.timeout = 5000; // 设置超时
             xhr.send();
 
+            logMessage("更新检查HTTP请求完成，状态码: " + xhr.status);
             if (xhr.status === 200) {
                 var remoteContent = xhr.responseText;
+                logMessage("成功获取远程字体数据，大小: " + remoteContent.length + " 字节");
+
                 // 尝试解析远程JSON
                 var remoteData = eval("(" + remoteContent + ")");
                 var remoteVersion = remoteData.version || "unknown";
+                logMessage("远程字体数据版本: " + remoteVersion + ", 本地版本: " + fontDataVersion);
 
                 // 如果本地版本与远程版本不同，提示更新
                 if (remoteVersion !== fontDataVersion && remoteVersion !== "unknown") {
                     var userChoice = confirm("发现字体数据更新！\n本地版本: " + fontDataVersion + "\n远程版本: " + remoteVersion + "\n\n是否更新字体数据？");
                     if (userChoice) {
                         // 保存远程内容到本地文件
-                        var parentFolder = fontDataFile.parent;
-                        if (!parentFolder.exists) {
-                            parentFolder.create();
+                        try {
+                            var parentFolder = fontDataFile.parent;
+                            logMessage("用户确认更新，目标目录: " + parentFolder.fsName);
+
+                            // 使用递归创建目录，确保所有父目录都存在
+                            if (!parentFolder.exists) {
+                                logMessage("目录不存在，尝试递归创建...");
+                                parentFolder.create("DIRECTORY", true);
+                                logMessage("目录创建" + (parentFolder.exists ? "成功" : "失败"));
+                            }
+
+                            // 写入文件
+                            fontDataFile.open("w");
+                            fontDataFile.write(remoteContent);
+                            fontDataFile.close();
+
+                            // 验证保存是否成功
+                            logMessage("字体数据更新保存后，文件是否存在: " + fontDataFile.exists);
+
+                            if (fontDataFile.exists) {
+                                // 重新加载数据
+                                fontData = remoteData;
+                                fontDataVersion = remoteVersion;
+                                logMessage("字体数据已更新至版本: " + remoteVersion);
+                                return true;
+                            } else {
+                                logMessage("警告: 字体数据文件保存后检查失败，文件似乎不存在");
+                                // 即使文件检查失败，仍然更新内存中的数据
+                                fontData = remoteData;
+                                fontDataVersion = remoteVersion;
+                                return true;
+                            }
+                        } catch (saveError) {
+                            logMessage("保存更新后的字体数据时出错: " + saveError.toString());
+                            // 即使保存失败，仍然更新内存中的数据
+                            fontData = remoteData;
+                            fontDataVersion = remoteVersion;
+                            return true;
                         }
-
-                        fontDataFile.open("w");
-                        fontDataFile.write(remoteContent);
-                        fontDataFile.close();
-
-                        // 重新加载数据
-                        fontData = remoteData;
-                        fontDataVersion = remoteVersion;
-                        logMessage("字体数据已更新至版本: " + remoteVersion);
-                        return true;
+                    } else {
+                        logMessage("用户取消字体数据更新");
                     }
+                } else {
+                    logMessage("字体数据已是最新版本，无需更新");
                 }
+            } else {
+                logMessage("从URL获取字体数据失败，HTTP状态码: " + xhr.status + ", 状态文本: " + xhr.statusText);
             }
         } catch (e) {
-            logMessage("检查字体数据更新时出错: " + e.toString());
+            logMessage("检查字体数据更新时出错: " + e.toString() + ", 错误名称: " + e.name);
         }
         return false;
     }
@@ -360,7 +491,9 @@ app.bringToFront();
                     displayOrder: displayOrder,
                     enableCommercialCheck: enableCommercialCheck,
                     githubFontDataUrl: githubFontDataUrl,
-                    fontDataVersion: fontDataVersion
+                    fontDataVersion: fontDataVersion,
+                    customCommercialStatus: customCommercialStatus || "✅ ",
+                    customUnknownStatus: customUnknownStatus || "❓ "
                 }
             };
         }
@@ -434,21 +567,141 @@ app.bringToFront();
                 return { isCommercial: false, info: null };
             }
 
-            // 标准化字体名称进行比较
-            var normalizedFontName = normalizeFontName(fontName);
+            // 确保fontName是字符串
+            fontName = String(fontName || "");
 
-            // 遍历字体数据查找匹配项
+            // 智能提取字体系列名，处理多种情况
+            // 1. 去除常见的区域标识（SC/TC等）
+            var processedFontName = fontName.replace(/\s+(SC|TC|HK|JP|KR|CN|TW)\b/gi, "");
+
+            // 2. 提取字体系列名的多种可能性
+            var possibleNames = [
+                fontName,           // 原始名称
+                processedFontName   // 去除区域标识后的名称
+            ];
+
+            // 3. 处理可能的样式标识（通常在最后）
+            // 中文样式标识
+            var chineseStyleKeywords = ["常规", "加粗", "斜体", "黑体", "宋体", "楷体", "仿宋", "细体", "中等", "粗体", "轻型", "黑", "常规", "斜体", "细体", "中等", "粗体", "加粗", "轻型", "黑体", "宋体", "楷体", "仿宋"];
+            // 英文样式标识
+            var englishStyleKeywords = ["Regular", "Bold", "Italic", "Light", "Medium", "Heavy", "Thin", "Black", "SemiBold", "ExtraBold", "UltraBold", "Book", "Roman", "Oblique"];
+
+            // 尝试提取可能的字体系列名
+            var words = processedFontName.split(" ");
+            if (words.length > 1) {
+                // 尝试去掉最后一个单词（可能是样式）
+                var lastWord = words[words.length - 1];
+                var isStyleKeyword = false;
+
+                // 检查是否是样式关键字
+                for (var k = 0; k < chineseStyleKeywords.length; k++) {
+                    if (lastWord === chineseStyleKeywords[k]) {
+                        isStyleKeyword = true;
+                        break;
+                    }
+                }
+
+                if (!isStyleKeyword) {
+                    for (var k = 0; k < englishStyleKeywords.length; k++) {
+                        if (lastWord.toLowerCase() === englishStyleKeywords[k].toLowerCase()) {
+                            isStyleKeyword = true;
+                            break;
+                        }
+                    }
+                }
+
+                // 如果最后一个单词是样式关键字，则去掉它
+                if (isStyleKeyword && words.length > 1) {
+                    var familyOnly = words.slice(0, -1).join(" ");
+                    possibleNames.push(familyOnly);
+                }
+            }
+
+            // 日志记录：开始检查的字体名称和可能的匹配名称
+            // logMessage("检查字体商用状态: " + fontName + "，可能的匹配名称: " + possibleNames.join(", "));
+
+            // 主要匹配：尝试所有可能的字体名称变体
             for (var i = 0; i < fontData.length; i++) {
                 var font = fontData[i];
                 var dataFontName = font.fontPsName || "";
-                if (dataFontName && normalizedFontName === dataFontName) {
-                    // 猫啃网的字体默认认为是可商用的
-                    return {
-                        isCommercial: true,
-                        info: font
-                    };
+
+                // 对每个可能的字体名称进行匹配尝试
+                for (var p = 0; p < possibleNames.length; p++) {
+                    var possibleName = possibleNames[p];
+
+                    // 精确匹配
+                    if (dataFontName && possibleName.toLowerCase() === dataFontName.toLowerCase()) {
+                        // logMessage("找到匹配: " + dataFontName + " (使用 " + possibleName + ")");
+                        return {
+                            isCommercial: true,
+                            info: font
+                        };
+                    }
+
+                    // 检查是否是包含关系（适用于多空格的英文名称）
+                    if (dataFontName && possibleName.toLowerCase().indexOf(dataFontName.toLowerCase()) === 0) {
+                        // logMessage("找到包含匹配: " + dataFontName + " 在 " + possibleName + " 中");
+                        return {
+                            isCommercial: true,
+                            info: font
+                        };
+                    }
+
+                    // 反向检查包含关系
+                    if (dataFontName && dataFontName.toLowerCase().indexOf(possibleName.toLowerCase()) === 0) {
+                        // logMessage("找到反向包含匹配: " + possibleName + " 在 " + dataFontName + " 中");
+                        return {
+                            isCommercial: true,
+                            info: font
+                        };
+                    }
                 }
             }
+
+            // 备选方案：保留标准化匹配作为后备
+            var normalizedFontName = normalizeFontName(fontName);
+            if (normalizedFontName) {
+                for (var i = 0; i < fontData.length; i++) {
+                    var font = fontData[i];
+                    var dataFontName = font.fontPsName || "";
+                    var normalizedDataName = normalizeFontName(dataFontName);
+
+                    // 尝试标准化名称匹配
+                    if (normalizedDataName &&
+                        (normalizedFontName.toLowerCase() === normalizedDataName.toLowerCase() ||
+                            normalizedFontName.toLowerCase().indexOf(normalizedDataName.toLowerCase()) === 0 ||
+                            normalizedDataName.toLowerCase().indexOf(normalizedFontName.toLowerCase()) === 0)) {
+                        // logMessage("找到标准化匹配: " + normalizedDataName);
+                        return {
+                            isCommercial: true,
+                            info: font
+                        };
+                    }
+                }
+            }
+
+            // 作为最后的手段，进行模糊匹配
+            if (normalizedFontName) {
+                for (var i = 0; i < fontData.length; i++) {
+                    var font = fontData[i];
+                    var dataFontName = font.fontPsName || "";
+                    var normalizedDataName = normalizeFontName(dataFontName);
+
+                    if (normalizedDataName && (
+                        normalizedFontName.toLowerCase().indexOf(normalizedDataName.toLowerCase()) !== -1 ||
+                        normalizedDataName.toLowerCase().indexOf(normalizedFontName.toLowerCase()) !== -1
+                    )) {
+                        // logMessage("找到部分匹配: " + normalizedDataName);
+                        return {
+                            isCommercial: true,
+                            info: font
+                        };
+                    }
+                }
+            }
+
+            // 日志记录：未找到匹配
+            // logMessage("未找到匹配: " + fontName + " (标准化后: " + normalizedFontName + ")");
 
             return { isCommercial: false, info: null };
         } catch (e) {
@@ -526,7 +779,7 @@ app.bringToFront();
             titlePanel.alignChildren = ["fill", "top"];
             titlePanel.margins = 15;
 
-            // 控制台日志和脚本警告设置（合并到一行节省高度）
+            // 控制台日志、脚本警告和可商用检测设置（合并到一行节省高度）
             var logGroup = titlePanel.add("group");
             logGroup.orientation = "row";
             logGroup.alignChildren = ["left", "center"];
@@ -538,17 +791,19 @@ app.bringToFront();
             warningCheckbox.helpTip = "在每一次替换字体后都会弹出替换信息提示";
             warningCheckbox.value = showScriptWarning; // 使用全局变量
             var commercialCheckbox = logGroup.add("checkbox", undefined, "可商用检测");
-            commercialCheckbox.helpTip = "启用后会在字体列表中显示字体的商用授权状态（✅可商用、❌不可商用、❓未知）";
-            commercialCheckbox.value = enableCommercialCheck; // 使用全局变量
-
-            // 可商用检测设置
-            var commercialGroup = titlePanel.add("group");
-            commercialGroup.orientation = "row";
-            commercialGroup.alignChildren = ["left", "center"];
-            commercialGroup.spacing = 10;
-            var commercialCheckbox = commercialGroup.add("checkbox", undefined, "可商用检测");
             commercialCheckbox.helpTip = "启用后会在字体列表中显示商用状态标识，并支持免费字体下载功能";
             commercialCheckbox.value = enableCommercialCheck; // 使用全局变量
+
+            // 为可商用检测复选框添加事件监听器，实现实时更新
+            commercialCheckbox.onClick = function () {
+                // 立即更新全局变量
+                enableCommercialCheck = commercialCheckbox.value;
+
+                // 实时更新主面板的文本区域显示
+                if (typeof refreshFontList === 'function') {
+                    refreshFontList();
+                }
+            };
 
             // 字体显示格式设置面板
             var displayPanel = titlePanel.add("panel", undefined, "🎨 字体显示格式设置");
@@ -869,6 +1124,54 @@ app.bringToFront();
                 default: sortDropdown.selection = 0; break;
             }
 
+            // 自定义商用状态显示设置
+            var commercialStatusPanel = settingsWin.add("panel", undefined, "🎨 自定义商用状态显示");
+            commercialStatusPanel.orientation = "column";
+            commercialStatusPanel.alignChildren = ["fill", "top"];
+            commercialStatusPanel.margins = 15;
+            commercialStatusPanel.spacing = 10;
+
+            var commercialStatusGroup = commercialStatusPanel.add("group");
+            commercialStatusGroup.orientation = "row";
+            commercialStatusGroup.alignChildren = ["left", "center"];
+            commercialStatusGroup.spacing = 10;
+
+            var commercialStatusLabel = commercialStatusGroup.add("statictext", undefined, "可商用状态显示：");
+            commercialStatusLabel.preferredSize = [100, 20];
+
+            var commercialStatusInput = commercialStatusGroup.add("edittext", undefined, customCommercialStatus || "✅ ");
+            commercialStatusInput.preferredSize = [120, 24]; // 增加宽度和高度
+            commercialStatusInput.helpTip = "输入要显示的可商用状态符号或文本，默认为✅";
+
+            // 为可商用状态输入框添加实时更新事件
+            commercialStatusInput.onChange = function () {
+                customCommercialStatus = commercialStatusInput.text || "✅ ";
+                // 如果当前在字体检测结果界面，实时更新显示
+                if (typeof populateFontList === 'function') {
+                    populateFontList();
+                }
+            };
+
+            var unknownStatusLabel = commercialStatusGroup.add("statictext", undefined, "未知状态显示：");
+            unknownStatusLabel.preferredSize = [100, 24];
+
+            var unknownStatusInput = commercialStatusGroup.add("edittext", undefined, customUnknownStatus || "❓ ");
+            unknownStatusInput.preferredSize = [120, 24]; // 增加宽度和高度
+            unknownStatusInput.helpTip = "输入要显示的未知状态符号或文本，默认为❓";
+
+            // 为未知状态输入框添加实时更新事件
+            unknownStatusInput.onChange = function () {
+                customUnknownStatus = unknownStatusInput.text || "❓ ";
+                // 如果当前在字体检测结果界面，实时更新显示
+                if (typeof populateFontList === 'function') {
+                    populateFontList();
+                }
+            };
+
+            var statusHelpText = commercialStatusPanel.add("statictext", undefined, "提示：您可以输入任意字符（如emoji、文字、符号等）来自定义显示内容,\n 未知状态只是代表猫啃网没有该字体，并不代100%表不可商用");
+            statusHelpText.graphics.font = ScriptUI.newFont("dialog", "Regular", 10);
+            statusHelpText.graphics.foregroundColor = statusHelpText.graphics.newPen(statusHelpText.graphics.PenType.SOLID_COLOR, [0.5, 0.5, 0.5], 1);
+
             // 添加排序方式改变事件
             sortDropdown.onChange = function () {
                 // 更新排序方式设置
@@ -945,6 +1248,14 @@ app.bringToFront();
                 showLayerContent = contentCheckbox.value;
                 showPostScriptName = psCheckbox.value;
 
+                // 保存自定义商用状态显示设置
+                if (typeof commercialStatusInput !== 'undefined' && commercialStatusInput) {
+                    customCommercialStatus = commercialStatusInput.text || "✅ ";
+                }
+                if (typeof unknownStatusInput !== 'undefined' && unknownStatusInput) {
+                    customUnknownStatus = unknownStatusInput.text || "❓ ";
+                }
+
                 // 至少要选择一个显示选项
                 if (!showFriendlyName && !showLayerContent && !showPostScriptName) {
                     alert("请至少选择一个显示内容选项！");
@@ -1011,7 +1322,7 @@ app.bringToFront();
 
             // 复位设置按钮点击事件
             resetBtn.onClick = function () {
-                if (confirm("确定要将所有设置恢复到初始状态吗？\n\n这将重置：\n• 控制台日志显示\n• 字体显示格式\n• 显示顺序\n• 图层排序方式")) {
+                if (confirm("确定要将所有设置恢复到初始状态吗？\n\n这将重置：\n• 控制台日志显示\n• 字体显示格式\n• 显示顺序\n• 图层排序方式\n• 自定义商用状态显示")) {
                     // 恢复到初始默认设置
                     showLogCheckbox.value = true;
                     friendlyCheckbox.value = true;
@@ -1022,6 +1333,14 @@ app.bringToFront();
 
                     // 重置显示顺序为默认值
                     displayOrder = ["friendly", "content"];
+
+                    // 重置自定义商用状态显示
+                    if (typeof commercialStatusInput !== 'undefined' && commercialStatusInput) {
+                        commercialStatusInput.text = "✅ ";
+                    }
+                    if (typeof unknownStatusInput !== 'undefined' && unknownStatusInput) {
+                        unknownStatusInput.text = "❓ ";
+                    }
 
                     // 更新界面显示
                     updateOrderList();
@@ -1073,8 +1392,31 @@ app.bringToFront();
         var likeURL = "https://getquicker.net/Sharedaction?code=6471ed9b-8254-443d-0267-08ddf9bab61f";
         var followURL = "https://open.weixin.qq.com/qr/code?username=gh_3ff7a91772aa";
 
+        // 免费字体下载相关变量
+        var currentFontDownloadURL = null; // 当前选中字体的下载URL
+        var isDownloadMode = false; // 是否处于下载模式
+
+        // 百度搜索相关变量
+        var currentSearchFont = null; // 当前需要搜索的字体名称
+        var isSearchMode = false; // 是否处于搜索模式
+
         // 更新按钮状态的函数
         function updateDonateButtonState() {
+            // 如果处于下载模式，显示下载按钮
+            if (isDownloadMode) {
+                donateBtn.text = "⬇ 下载字体";
+                donateBtn.helpTip = "点击进入猫啃网此字体页面，查看更多关于该字体的内容";
+                return;
+            }
+
+            // 如果处于搜索模式，显示百度搜索按钮
+            if (isSearchMode) {
+                donateBtn.text = "🔍 百度搜索";
+                donateBtn.helpTip = "点击前往百度搜索该字体是否免费商用";
+                return;
+            }
+
+            // 否则显示正常的三状态循环
             switch (buttonState) {
                 case 0: // 打赏模式
                     donateBtn.text = "❤ 打赏作者";
@@ -1091,6 +1433,15 @@ app.bringToFront();
             }
         }
 
+        // 重置按钮到默认状态的函数
+        function resetDonateButtonState() {
+            isDownloadMode = false;
+            isSearchMode = false;
+            currentFontDownloadURL = null;
+            currentSearchFont = null;
+            updateDonateButtonState();
+        }
+
         // 设置按钮点击事件
         settingsBtn.onClick = function () {
             var oldShowConsoleLog = showConsoleLog;
@@ -1102,8 +1453,42 @@ app.bringToFront();
             }
         };
 
-        // 打赏按钮点击事件（支持三状态循环切换）
+        // 打赏按钮点击事件（支持三状态循环切换、字体下载功能和百度搜索）
         donateBtn.onClick = function () {
+            // 优先检查是否处于下载模式
+            if (isDownloadMode && currentFontDownloadURL) {
+                // 打开字体下载链接
+                var success = openURL(currentFontDownloadURL);
+
+                // 添加日志记录
+                if (showConsoleLog && typeof logText !== 'undefined' && logText && success) {
+                    logText.text += "⬇ 正在打开免费字体下载链接\n";
+                }
+
+                // 点击后自动切换回默认的三状态模式
+                resetDonateButtonState();
+                return;
+            }
+
+            // 检查是否处于搜索模式
+            if (isSearchMode && currentSearchFont) {
+                // 构建百度搜索URL
+                var searchURL = "https://www.baidu.com/s?&wd=" + encodeURIComponent(currentSearchFont + "免费商用吗");
+
+                // 打开百度搜索链接
+                var success = openURL(searchURL);
+
+                // 添加日志记录
+                if (showConsoleLog && typeof logText !== 'undefined' && logText && success) {
+                    logText.text += "🔍 正在搜索字体: " + currentSearchFont + " 是否免费商用\n";
+                }
+
+                // 点击后自动切换回默认的三状态模式
+                resetDonateButtonState();
+                return;
+            }
+
+            // 非下载和搜索模式时，执行常规的三状态循环
             var targetURL;
             var currentAction;
 
@@ -1151,20 +1536,51 @@ app.bringToFront();
         // 添加自动选择相同字体的复选框和相关控件
         var autoSelectGroup = win.add("group");
         autoSelectGroup.orientation = "row";
-        autoSelectGroup.alignChildren = ["left", "center"];
+        autoSelectGroup.alignChildren = ["fill", "center"];
         autoSelectGroup.spacing = 15; // 设置控件间距
 
-        var autoSelectCheckbox = autoSelectGroup.add("checkbox", undefined, "自动选中相同字体");
+        // 左侧复选框组
+        var checkboxGroup = autoSelectGroup.add("group");
+        checkboxGroup.orientation = "row";
+        checkboxGroup.alignChildren = ["left", "center"];
+        checkboxGroup.spacing = 15;
+
+        var autoSelectCheckbox = checkboxGroup.add("checkbox", undefined, "自动选中相同字体");
         autoSelectCheckbox.value = false;
         autoSelectCheckbox.helpTip = "启用后，点击任意图层将自动选中所有使用相同字体的图层";
 
         // 添加反选复选框
-        var invertSelectionCheckbox = autoSelectGroup.add("checkbox", undefined, "🔄 反选");
+        var invertSelectionCheckbox = checkboxGroup.add("checkbox", undefined, "🔄 反选");
         invertSelectionCheckbox.helpTip = "点击反转当前所有图层的选中状态";
 
         // 添加取消选中复选框
-        var clearSelectionCheckbox = autoSelectGroup.add("checkbox", undefined, "❌ 取消选中");
+        var clearSelectionCheckbox = checkboxGroup.add("checkbox", undefined, "❌ 取消选中");
         clearSelectionCheckbox.helpTip = "勾选后点击可取消所有图层的选中状态";
+
+        // 右侧按钮组，用于放置反馈按钮
+        var buttonGroup = autoSelectGroup.add("group");
+        buttonGroup.orientation = "row";
+        buttonGroup.alignChildren = ["right", "center"];
+
+        // 添加反馈可商用按钮（默认隐藏）
+        var feedbackButton = buttonGroup.add("button", undefined, "反馈该字体可商用");
+        feedbackButton.helpTip = "点击提交该字体的可商用信息到社区";
+        feedbackButton.visible = false; // 初始隐藏按钮
+
+        // 为反馈按钮添加点击事件，使用与多功能按钮相同的方式打开URL
+        feedbackButton.onClick = function () {
+            // 打开指定的URL
+            var url = "https://getquicker.net/Common/Topics/ViewTopic/36399";
+            var success = openURL(url);
+
+            // 添加日志记录
+            if (showConsoleLog && typeof logText !== 'undefined' && logText && success) {
+                logText.text += "🔗 已打开字体商用信息反馈页面\n";
+            }
+
+            // 点击后自动隐藏按钮
+            feedbackButton.visible = false;
+        };
 
         // 添加选中状态统计显示
         var selectionStatsGroup = win.add("group");
@@ -1394,11 +1810,12 @@ app.bringToFront();
                 // 可商用检测标识
                 var commercialStatus = "";
                 if (enableCommercialCheck && typeof checkCommercialUse === 'function') {
-                    var commercialInfo = checkCommercialUse(psName);
+                    // 使用friendlyName进行商用检测，这样可以先通过getFriendlyFontName获取友好名称，再进行标准化和匹配
+                    var commercialInfo = checkCommercialUse(friendlyName);
                     if (commercialInfo && commercialInfo.isCommercial === true) {
-                        commercialStatus = "✅ "; // 可商用
+                        commercialStatus = customCommercialStatus || "✅ "; // 可商用（支持自定义显示）
                     } else {
-                        commercialStatus = "❓ "; // 未知
+                        commercialStatus = customUnknownStatus || "❓ "; // 未知（支持自定义显示）
                     }
                 }
 
@@ -1508,9 +1925,16 @@ app.bringToFront();
         updateDocumentStats();
         updateSelectionStats();
 
-        // 添加自动选择相同字体的功能
+        // 添加自动选择相同字体的功能，并处理免费字体下载按钮
         fontList.onClick = function () {
-            if (autoSelectCheckbox.value && fontList.selection) {
+            // 重置按钮到默认状态
+            resetDonateButtonState();
+            // 隐藏反馈按钮
+            if (typeof feedbackButton !== 'undefined' && feedbackButton) {
+                feedbackButton.visible = false;
+            }
+
+            if (fontList.selection) {
                 // 获取当前选中项的字体名称
                 var selectedItems = fontList.selection;
                 if (selectedItems && selectedItems.length > 0) {
@@ -1520,11 +1944,53 @@ app.bringToFront();
 
                     // 获取对应图层的PostScript字体名称
                     var selectedFont = sortedLayers[selectedIndex].textItem.font;
+                    var friendlyName = getFriendlyFontName(selectedFont);
 
-                    // 自动选择所有使用相同字体的图层
-                    for (var i = 0; i < sortedLayers.length; i++) {
-                        if (sortedLayers[i].textItem.font === selectedFont) {
-                            fontList.items[i].selected = true;
+                    // 检查字体状态并设置相应的按钮模式
+                    if (enableCommercialCheck && typeof checkCommercialUse === 'function') {
+                        var commercialInfo = checkCommercialUse(friendlyName);
+
+                        // 如果是免费商用字体，设置为下载模式
+                        if (commercialInfo && commercialInfo.isCommercial === true && commercialInfo.info) {
+                            // 从字体信息中获取下载链接
+                            var fontData = commercialInfo.info;
+                            if (fontData.fonts && fontData.fonts.length > 0 && fontData.fonts[0].url) {
+                                // 设置为下载模式
+                                isDownloadMode = true;
+                                currentFontDownloadURL = fontData.fonts[0].url;
+                                updateDonateButtonState();
+
+                                // 添加日志记录
+                                if (showConsoleLog && typeof logText !== 'undefined' && logText) {
+                                    logText.text += "🔍 检测到免费字体: " + friendlyName + "，点击右上方下载按钮进入猫啃网查看更多信息~\n";
+                                }
+                            }
+                        }
+                        // 如果是未知状态的字体，设置为搜索模式
+                        else {
+                            // 设置为百度搜索模式
+                            isSearchMode = true;
+                            currentSearchFont = friendlyName;
+                            updateDonateButtonState();
+
+                            // 显示反馈可商用按钮
+                            feedbackButton.visible = true;
+
+                            // 添加日志记录
+                            if (showConsoleLog && typeof logText !== 'undefined' && logText) {
+                                logText.text += "🔍 未知字体: " + friendlyName + "，点击右上方百度搜索按钮查询是否免费商用\n";
+                                logText.text += "📝 如果确认该字体可商用，请点击下方'反馈该字体可商用'按钮提交信息\n";
+                            }
+                        }
+                    }
+
+                    // 如果启用了自动选择功能，选择所有相同字体的图层
+                    if (autoSelectCheckbox.value) {
+                        // 自动选择所有使用相同字体的图层
+                        for (var i = 0; i < sortedLayers.length; i++) {
+                            if (sortedLayers[i].textItem.font === selectedFont) {
+                                fontList.items[i].selected = true;
+                            }
                         }
                     }
                 }
