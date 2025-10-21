@@ -29,7 +29,7 @@ app.bringToFront();
     var fontData = null; // 存储字体数据的全局变量
     var fontDataVersion = null; // 存储字体数据版本
     var fontDataFile = null; // 字体数据文件路径
-    var githubFontDataUrl = "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS%E5%AD%97%E4%BD%93%E6%A3%80%E6%B5%8B/%E7%8C%AB%E5%95%83%E7%BD%91%E5%85%8D%E8%B4%B9%E5%AD%97%E4%BD%93%E5%90%88%E9%9B%86.json" //"https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/PS字体检测/猫啃网免费字体合集.json"; // GitHub字体数据URL（用户需要替换为实际URL）
+    var githubFontDataUrl = "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS字体检测/猫啃网免费字体合集.json" //"https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/PS字体检测/猫啃网免费字体合集.json"; // GitHub字体数据URL（用户需要替换为实际URL）
 
     // ======================================================
     // 辅助函数模块 - 包含通用工具函数
@@ -121,10 +121,10 @@ app.bringToFront();
                     showScriptWarning = settings.showScriptWarning !== undefined ? settings.showScriptWarning : false;
                     displayOrder = settings.displayOrder || ["friendly", "content"];
                     enableCommercialCheck = settings.enableCommercialCheck !== undefined ? settings.enableCommercialCheck : true;
-                    githubFontDataUrl = settings.githubFontDataUrl || "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS%E5%AD%97%E4%BD%93%E6%A3%80%E6%B5%8B/%E7%8C%AB%E5%95%83%E7%BD%91%E5%85%8D%E8%B4%B9%E5%AD%97%E4%BD%93%E5%90%88%E9%9B%86.json";
+                    githubFontDataUrl = settings.githubFontDataUrl || "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS字体检测/猫啃网免费字体合集.json";
                     fontDataVersion = settings.fontDataVersion || null;
-                    customCommercialStatus = settings.customCommercialStatus || "✅ "; // 加载自定义可商用状态显示
-                    customUnknownStatus = settings.customUnknownStatus || "❓ "; // 加载自定义未知状态显示
+                    customCommercialStatus = settings.customCommercialStatus || "【可商用】"; // 加载自定义可商用状态显示
+                    customUnknownStatus = settings.customUnknownStatus || "【X 商用】"; // 加载自定义未知状态显示
                     return true;
                 }
             }
@@ -140,11 +140,11 @@ app.bringToFront();
         showPostScriptName = false;
         showScriptWarning = false;
         enableCommercialCheck = true;
-        githubFontDataUrl = "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS%E5%AD%97%E4%BD%93%E6%A3%80%E6%B5%8B/%E7%8C%AB%E5%95%83%E7%BD%91%E5%85%8D%E8%B4%B9%E5%AD%97%E4%BD%93%E5%90%88%E9%9B%86.json";
+        githubFontDataUrl = "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS字体检测/猫啃网免费字体合集.json";
         fontDataVersion = null;
         displayOrder = ["friendly", "content"];
-        customCommercialStatus = "✅ "; // 可商用默认显示
-        customUnknownStatus = "❓ "; // 未知默认显示
+        customCommercialStatus = "【可商用】"; // 可商用默认显示
+        customUnknownStatus = "【X 商用】"; // 未知默认显示
         return false;
     }
 
@@ -492,8 +492,8 @@ app.bringToFront();
                     enableCommercialCheck: enableCommercialCheck,
                     githubFontDataUrl: githubFontDataUrl,
                     fontDataVersion: fontDataVersion,
-                    customCommercialStatus: customCommercialStatus || "✅ ",
-                    customUnknownStatus: customUnknownStatus || "❓ "
+                    customCommercialStatus: customCommercialStatus || "【可商用】",
+                    customUnknownStatus: customUnknownStatus || "【X 商用】",
                 }
             };
         }
@@ -1139,13 +1139,13 @@ app.bringToFront();
             var commercialStatusLabel = commercialStatusGroup.add("statictext", undefined, "可商用状态显示：");
             commercialStatusLabel.preferredSize = [100, 20];
 
-            var commercialStatusInput = commercialStatusGroup.add("edittext", undefined, customCommercialStatus || "✅ ");
+            var commercialStatusInput = commercialStatusGroup.add("edittext", undefined, customCommercialStatus || "【可商用】");
             commercialStatusInput.preferredSize = [120, 24]; // 增加宽度和高度
             commercialStatusInput.helpTip = "输入要显示的可商用状态符号或文本，默认为✅";
 
             // 为可商用状态输入框添加实时更新事件
             commercialStatusInput.onChange = function () {
-                customCommercialStatus = commercialStatusInput.text || "✅ ";
+                customCommercialStatus = commercialStatusInput.text || "【可商用】";
                 // 如果当前在字体检测结果界面，实时更新显示
                 if (typeof populateFontList === 'function') {
                     populateFontList();
@@ -1155,22 +1155,29 @@ app.bringToFront();
             var unknownStatusLabel = commercialStatusGroup.add("statictext", undefined, "未知状态显示：");
             unknownStatusLabel.preferredSize = [100, 24];
 
-            var unknownStatusInput = commercialStatusGroup.add("edittext", undefined, customUnknownStatus || "❓ ");
+            var unknownStatusInput = commercialStatusGroup.add("edittext", undefined, customUnknownStatus || "【X 商用】");
             unknownStatusInput.preferredSize = [120, 24]; // 增加宽度和高度
             unknownStatusInput.helpTip = "输入要显示的未知状态符号或文本，默认为❓";
 
             // 为未知状态输入框添加实时更新事件
             unknownStatusInput.onChange = function () {
-                customUnknownStatus = unknownStatusInput.text || "❓ ";
+                customUnknownStatus = unknownStatusInput.text || "【X 商用】";
                 // 如果当前在字体检测结果界面，实时更新显示
                 if (typeof populateFontList === 'function') {
                     populateFontList();
                 }
             };
 
-            var statusHelpText = commercialStatusPanel.add("statictext", undefined, "提示：您可以输入任意字符（如emoji、文字、符号等）来自定义显示内容,\n 未知状态只是代表猫啃网没有该字体，并不代100%表不可商用");
-            statusHelpText.graphics.font = ScriptUI.newFont("dialog", "Regular", 10);
-            statusHelpText.graphics.foregroundColor = statusHelpText.graphics.newPen(statusHelpText.graphics.PenType.SOLID_COLOR, [0.5, 0.5, 0.5], 1);
+            // 添加第一行提示文本
+            var statusHelpText1 = commercialStatusPanel.add("statictext", undefined, "提示：您可以输入任意字符（如emoji、文字、符号等）来自定义显示内容");
+            statusHelpText1.graphics.font = ScriptUI.newFont("dialog", "Regular", 11);
+            statusHelpText1.graphics.foregroundColor = statusHelpText1.graphics.newPen(statusHelpText1.graphics.PenType.SOLID_COLOR, [0.7, 0.7, 0.7], 1);
+
+            // 添加第二行提示文本
+            var statusHelpText2 = commercialStatusPanel.add("statictext", undefined, "未知状态只是代表猫啃网没有该字体，并不100%代表不可商用");
+            statusHelpText2.graphics.font = ScriptUI.newFont("dialog", "Regular", 11);
+            statusHelpText2.graphics.foregroundColor = statusHelpText2.graphics.newPen(statusHelpText2.graphics.PenType.SOLID_COLOR, [0.7, 0.7, 0.7], 1);
+            // 两行文本的样式已在上面设置
 
             // 添加排序方式改变事件
             sortDropdown.onChange = function () {
@@ -1336,10 +1343,10 @@ app.bringToFront();
 
                     // 重置自定义商用状态显示
                     if (typeof commercialStatusInput !== 'undefined' && commercialStatusInput) {
-                        commercialStatusInput.text = "✅ ";
+                        commercialStatusInput.text = "【可商用】";
                     }
                     if (typeof unknownStatusInput !== 'undefined' && unknownStatusInput) {
-                        unknownStatusInput.text = "❓ ";
+                        unknownStatusInput.text = "【X 商用】";
                     }
 
                     // 更新界面显示
@@ -1813,9 +1820,9 @@ app.bringToFront();
                     // 使用friendlyName进行商用检测，这样可以先通过getFriendlyFontName获取友好名称，再进行标准化和匹配
                     var commercialInfo = checkCommercialUse(friendlyName);
                     if (commercialInfo && commercialInfo.isCommercial === true) {
-                        commercialStatus = customCommercialStatus || "✅ "; // 可商用（支持自定义显示）
+                        commercialStatus = customCommercialStatus || "【可商用】"; // 可商用（支持自定义显示）
                     } else {
-                        commercialStatus = customUnknownStatus || "❓ "; // 未知（支持自定义显示）
+                        commercialStatus = customUnknownStatus || "【X 商用】"; // 未知（支持自定义显示）
                     }
                 }
 
