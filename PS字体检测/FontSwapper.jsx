@@ -1,43 +1,39 @@
-// 这是一个用于 Photoshop 的字体查看和替换工具脚本
-// 主要功能:
-// 1. 查看当前文档中所有文字图层使用的字体
-// 2. 支持批量替换字体
-// 3. 可以按文档顺序、字体分组、使用频率等方式排序显示
-// 4. 提供友好的字体显示名称
-// 5. 支持保存用户偏好设置
-// 6. 支持撤销最近一次字体替换操作
-// 7. 支持自定义显示顺序和格式
-// 
-// 使用方法:
-// 1. 在 Photoshop 中打开需要处理的 PSD 文件
-// 2. 运行此脚本
-// 3. 在弹出的界面中查看字体信息或进行替换操作
-// 4. 点击设置按钮可自定义显示格式和顺序
-// 5. 点击撤销按钮可恢复上一次替换操作
-//
+// Photoshop 字体检测与替换工具
+// 功能：查看并批量替换Photoshop文档中的字体，支持多种排序和显示格式
+// 作者：小张
 // 作者网站: https://blog.z-l.top/
-// 首发网站：https://getquicker.net/Sharedaction?code=6471ed9b-8254-443d-0267-08ddf9bab61f
-// GitHub: https://github.com/xiaolongmr/jsx-ps
-// 版本: 2.2
-// 最后更新: 2025.10.20
+// GitHub地址: https://github.com/xiaolongmr/jsx-ps/tree/main/PS字体检测
+// 详细使用说明请查看: https://github.com/xiaolongmr/jsx-ps/blob/main/PS字体检测/README.md
+// 详细说明文件地址：https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/PS字体检测/README.md
 
 #target photoshop
 app.bringToFront();
 
 (function () {
 
-    // ====================== 全局设置变量 ======================
+    // ======================================================
+    // 全局变量区域 - 所有全局配置变量集中在此
+    // ======================================================
+    var SCRIPT_VERSION = "2.3"; // 脚本版本号，统一管理所有版本显示
+    var LAST_UPDATE_DATE = "2025.10.21"; // 最后更新时间，与README.md中的全局变量保持一致
     var showConsoleLog = true; // 默认显示控制台日志
     var layerSortOrder = "document"; // 图层排序：document(文档顺序), font(字体分组), frequency(字体出现次数)
     var showScriptWarning = false; // 默认不弹出脚本警告
-
-    // 显示格式选项（用户可勾选显示的内容）
-    var showFriendlyName = true;    // 显示友好字体名称
-    var showLayerContent = true;    // 显示文字内容（图层名称）
+    var showFriendlyName = true; // 显示友好字体名称
+    var showLayerContent = true; // 显示文字内容（图层名称）
     var showPostScriptName = false; // 显示PostScript名称
     var displayOrder = ["friendly", "content"]; // 显示顺序：friendly=友好名称, content=文字内容
+    var enableCommercialCheck = true; // 默认启用可商用检测
 
-    // ====================== 辅助函数 ======================
+    // 商用字体数据相关变量
+    var fontData = null; // 存储字体数据的全局变量
+    var fontDataVersion = null; // 存储字体数据版本
+    var fontDataFile = null; // 字体数据文件路径
+    var githubFontDataUrl = "https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/猫啃网免费字体合集.json"; // GitHub字体数据URL（用户需要替换为实际URL）
+
+    // ======================================================
+    // 辅助函数模块 - 包含通用工具函数
+    // ======================================================
     // 数组比较函数
     function arraysEqual(arr1, arr2) {
         if (arr1.length !== arr2.length) return false;
@@ -48,13 +44,24 @@ app.bringToFront();
     }
 
     // 刷新字体列表函数（将在UI创建后定义具体实现）
-    var refreshFontList = null;
+    var refreshFontList = null; // 全局函数引用
+
+    // 日志记录函数
+    function logMessage(message) {
+        if (showConsoleLog) {
+            try {
+                $.writeln(message);
+            } catch (e) {
+                // 忽略日志写入错误
+            }
+        }
+    }
 
     // 打开URL函数 - 使用临时HTML文件的方式
     function openURL(url) {
         try {
             // 创建临时HTML文件
-            var tempFile = new File(Folder.temp + "/tempLink.html");
+            var tempFile = new File(Folder.temp + "/quicker.html");
 
             // 写入自动跳转的HTML内容
             tempFile.open("w");
@@ -85,38 +92,26 @@ app.bringToFront();
         }
     }
 
-    // 设置文件路径 - 保存到用户文档目录
-    var settingsFile = new File(getUserDocumentsPath() + "/FontReplacerSettings.json");
+    // 设置文件路径 - 保存到用户文档目录下的Quicker文件夹,和其他quicker动作开发者保持一致
+    var settingsFile = new File(getUserDocumentsPath() + "/Quicker/Ps字体检测/FontReplacerSettings.json");
+    // 字体数据文件路径 - 与设置文件在同一目录
+    fontDataFile = new File(getUserDocumentsPath() + "/Quicker/Ps字体检测/猫啃网免费字体合集.json");
 
     // ====================== 设置管理函数 ======================
     // 加载设置
     function loadSettings() {
         try {
-            var fileToLoad = settingsFile;
-
-            // 如果主设置文件不存在，尝试从桌面加载
-            if (!settingsFile.exists) {
-                var backupFile = new File(Folder.desktop + "/FontReplacerSettings.txt");
-                if (backupFile.exists) {
-                    fileToLoad = backupFile;
-                }
-            }
-
-            if (fileToLoad.exists) {
-                fileToLoad.open("r");
-                var settingsData = fileToLoad.read();
-                fileToLoad.close();
+            // 只从主设置文件加载
+            if (settingsFile.exists) {
+                settingsFile.open("r");
+                var settingsData = settingsFile.read();
+                settingsFile.close();
 
                 if (settingsData) {
                     var settingsObj = eval("(" + settingsData + ")");
 
-                    // 检查是否为新的JSON格式（包含开发者留言）
-                    if (settingsObj.developer_message && settingsObj.settings) {
-                        var settings = settingsObj.settings;
-                    } else {
-                        // 兼容旧格式
-                        var settings = settingsObj;
-                    }
+                    // 只使用新的JSON格式
+                    var settings = settingsObj.settings;
 
                     showConsoleLog = settings.showConsoleLog !== undefined ? settings.showConsoleLog : true;
                     layerSortOrder = settings.layerSortOrder || "document";
@@ -125,6 +120,9 @@ app.bringToFront();
                     showPostScriptName = settings.showPostScriptName !== undefined ? settings.showPostScriptName : false;
                     showScriptWarning = settings.showScriptWarning !== undefined ? settings.showScriptWarning : false;
                     displayOrder = settings.displayOrder || ["friendly", "content"];
+                    enableCommercialCheck = settings.enableCommercialCheck !== undefined ? settings.enableCommercialCheck : true;
+                    githubFontDataUrl = settings.githubFontDataUrl || "https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/猫啃网免费字体合集.json";
+                    fontDataVersion = settings.fontDataVersion || null;
                     return true;
                 }
             }
@@ -139,8 +137,113 @@ app.bringToFront();
         showLayerContent = true;
         showPostScriptName = false;
         showScriptWarning = false;
+        enableCommercialCheck = true;
+        githubFontDataUrl = "https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/猫啃网免费字体合集.json";
+        fontDataVersion = null;
         displayOrder = ["friendly", "content"];
         return false;
+    }
+
+    // ====================== 字体数据管理函数 ======================
+    // 加载字体数据函数
+    function loadFontData() {
+        try {
+            // 首先尝试从本地文件加载
+            if (fontDataFile.exists) {
+                fontDataFile.open("r");
+                var jsonContent = fontDataFile.read();
+                fontDataFile.close();
+
+                if (jsonContent) {
+                    fontData = eval("(" + jsonContent + ")");
+                    // 从JSON中提取版本信息（如果有的话）
+                    fontDataVersion = fontData.version || "unknown";
+                    logMessage("字体数据加载成功，共包含 " + (fontData.length || 0) + " 个字体信息");
+                    return true;
+                }
+            }
+        } catch (e) {
+            logMessage("加载字体数据失败: " + e.toString());
+        }
+
+        // 如果本地加载失败，尝试从G盘原始位置复制
+        try {
+            var originalFontDataFile = new File("g:\\桌面\\jsx-ps\\PS字体检测\\猫啃网免费字体合集.json");
+            if (originalFontDataFile.exists) {
+                // 确保目标文件夹存在
+                var parentFolder = fontDataFile.parent;
+                if (!parentFolder.exists) {
+                    parentFolder.create();
+                }
+
+                // 复制文件
+                originalFontDataFile.copy(fontDataFile);
+                logMessage("已从原始位置复制字体数据文件");
+
+                // 重新加载
+                return loadFontData();
+            }
+        } catch (e) {
+            logMessage("复制字体数据文件失败: " + e.toString());
+        }
+
+        logMessage("无法加载字体数据，可商用检测功能将不可用");
+        return false;
+    }
+
+    // 检查字体是否可商用
+    function checkCommercialUse(fontName) {
+        try {
+            if (!fontData || !fontData.length) {
+                return undefined; // 数据未加载，返回undefined表示未知
+            }
+
+            // 标准化字体名称进行比较（去除字重信息等）
+            var normalizedFontName = normalizeFontName(fontName);
+
+            // 遍历字体数据查找匹配项
+            for (var i = 0; i < fontData.length; i++) {
+                var font = fontData[i];
+                // 直接使用fontPsName进行比较，因为它已经是不含字重的格式
+                var dataFontName = font.fontPsName || "";
+                if (dataFontName && normalizedFontName === dataFontName) {
+                    // 检查license是否存在且为可商用许可证
+                    var license = font.fonts[0] && font.fonts[0].license;
+                    if (license && license.value) {
+                        // 常见的可商用许可证类型
+                        var commercialLicenses = ["OFL", "MIT", "Apache", "CC0", "BSD", "商业", "可商用"];
+                        for (var j = 0; j < commercialLicenses.length; j++) {
+                            if (license.value.indexOf(commercialLicenses[j]) !== -1) {
+                                return true; // 可商用
+                            }
+                        }
+                        // 如果不是常见的可商用许可证，但存在许可证信息
+                        return true; // 猫啃网的字体默认认为是可商用的
+                    }
+                }
+            }
+
+            return undefined; // 未找到匹配的字体信息，返回undefined表示未知
+        } catch (e) {
+            logMessage("检查字体商用状态时出错: " + e.toString());
+            return undefined; // 出错时返回undefined表示未知
+        }
+    }
+
+    // 标准化字体名称（去除字重信息等）
+    function normalizeFontName(fontName) {
+        // 简单的标准化：去除常见的字重描述词
+        var weightKeywords = ["Bold", "Regular", "Italic", "Light", "Medium", "Heavy", "Thin",
+            "黑", "常规", "斜体", "细体", "中等", "粗体", "加粗", "轻型"];
+
+        var normalized = fontName;
+        for (var i = 0; i < weightKeywords.length; i++) {
+            var regex = new RegExp("\\s*" + weightKeywords[i] + "\\s*", "gi");
+            normalized = normalized.replace(regex, "");
+        }
+
+        // 去除多余空格
+        return normalized.trim();
     }
 
     // JSON格式化函数 - 用于美化JSON输出
@@ -188,15 +291,64 @@ app.bringToFront();
         return obj.toString();
     }
 
+    // 检查字体数据更新函数
+    function checkFontDataUpdate() {
+        try {
+            if (!githubFontDataUrl) {
+                logMessage("未设置GitHub字体数据URL，跳过更新检查");
+                return false;
+            }
+
+            // 使用XMLHttpRequest获取远程JSON文件的前几行，只需要版本信息
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", githubFontDataUrl, false); // 同步请求
+            xhr.overrideMimeType("application/json");
+            xhr.send();
+
+            if (xhr.status === 200) {
+                var remoteContent = xhr.responseText;
+                // 尝试解析远程JSON
+                var remoteData = eval("(" + remoteContent + ")");
+                var remoteVersion = remoteData.version || "unknown";
+
+                // 如果本地版本与远程版本不同，提示更新
+                if (remoteVersion !== fontDataVersion && remoteVersion !== "unknown") {
+                    var userChoice = confirm("发现字体数据更新！\n本地版本: " + fontDataVersion + "\n远程版本: " + remoteVersion + "\n\n是否更新字体数据？");
+                    if (userChoice) {
+                        // 保存远程内容到本地文件
+                        var parentFolder = fontDataFile.parent;
+                        if (!parentFolder.exists) {
+                            parentFolder.create();
+                        }
+
+                        fontDataFile.open("w");
+                        fontDataFile.write(remoteContent);
+                        fontDataFile.close();
+
+                        // 重新加载数据
+                        fontData = remoteData;
+                        fontDataVersion = remoteVersion;
+                        logMessage("字体数据已更新至版本: " + remoteVersion);
+                        return true;
+                    }
+                }
+            }
+        } catch (e) {
+            logMessage("检查字体数据更新时出错: " + e.toString());
+        }
+        return false;
+    }
+
     // 保存设置
     function saveSettings() {
         // 创建设置对象的公共函数（消除重复代码）
         function createSettingsObject() {
             return {
                 developer_message: "本脚本开源，欢迎使用，玩的开心",
-                author_website: "www.z-l.top",
+                author_website: "blog.z-l.top",
                 original_release: "https://getquicker.net/Sharedaction?code=6471ed9b-8254-443d-0267-08ddf9bab61f",
-                version: "2.0",
+                version: SCRIPT_VERSION,
+                last_update_date: LAST_UPDATE_DATE,
                 created_date: new Date().toString(),
                 settings: {
                     showConsoleLog: showConsoleLog,
@@ -205,7 +357,10 @@ app.bringToFront();
                     showLayerContent: showLayerContent,
                     showPostScriptName: showPostScriptName,
                     showScriptWarning: showScriptWarning,
-                    displayOrder: displayOrder
+                    displayOrder: displayOrder,
+                    enableCommercialCheck: enableCommercialCheck,
+                    githubFontDataUrl: githubFontDataUrl,
+                    fontDataVersion: fontDataVersion
                 }
             };
         }
@@ -220,7 +375,7 @@ app.bringToFront();
             file.close();
 
             if (showAlert) {
-                alert("设置已保存到桌面: " + file.fsName);
+                alert("设置已保存到桌面 (JSON格式): " + file.fsName);
             }
         }
 
@@ -236,22 +391,24 @@ app.bringToFront();
             return true;
 
         } catch (e) {
-            // 如果保存失败，尝试备用路径
-            try {
-                var backupFile = new File(Folder.desktop + "/FontReplacerSettings.txt");
-                saveToFile(backupFile, true);
-                return true;
-            } catch (e2) {
-                alert("保存设置失败: " + e.toString());
-                return false;
-            }
+            // 保存失败时显示错误信息
+            alert("保存设置失败: " + e.toString());
+            return false;
         }
     }
 
     // 在脚本开始时加载设置
     loadSettings();
 
-    // ====================== 工具函数 ======================
+    // 加载字体数据
+    loadFontData();
+
+    // 检查字体数据更新
+    checkFontDataUpdate();
+
+    // ======================================================
+    // 字体处理工具函数模块 - 包含字体相关的核心功能
+    // ======================================================
     function getAllTextLayers(doc) {
         var result = [];
         function traverse(layers) {
@@ -266,6 +423,38 @@ app.bringToFront();
         }
         traverse(doc.layers);
         return result;
+    }
+
+    // 已在上方定义loadFontData函数
+
+    // 检查字体是否可商用
+    function checkCommercialUse(fontName) {
+        try {
+            if (!enableCommercialCheck || !fontData || !fontData.length) {
+                return { isCommercial: false, info: null };
+            }
+
+            // 标准化字体名称进行比较
+            var normalizedFontName = normalizeFontName(fontName);
+
+            // 遍历字体数据查找匹配项
+            for (var i = 0; i < fontData.length; i++) {
+                var font = fontData[i];
+                var dataFontName = font.fontPsName || "";
+                if (dataFontName && normalizedFontName === dataFontName) {
+                    // 猫啃网的字体默认认为是可商用的
+                    return {
+                        isCommercial: true,
+                        info: font
+                    };
+                }
+            }
+
+            return { isCommercial: false, info: null };
+        } catch (e) {
+            logMessage("检查字体商用状态时出错: " + e.toString());
+            return { isCommercial: false, info: null };
+        }
     }
 
     // 替换字体函数（将在fontViewerAndReplacer函数内部定义）
@@ -284,7 +473,9 @@ app.bringToFront();
         return fontsInfo;
     }
 
-    // ====================== 主函数 ======================
+    // ======================================================
+    // 主函数模块 - 包含脚本的主要逻辑和执行流程
+    // ======================================================
     // 全局变量：文字图层数组
     var textLayers = [];
 
@@ -340,12 +531,24 @@ app.bringToFront();
             logGroup.orientation = "row";
             logGroup.alignChildren = ["left", "center"];
             logGroup.spacing = 20; // 增加间距
-            var showLogCheckbox = logGroup.add("checkbox", undefined, "显示控制台日志 📋");
+            var showLogCheckbox = logGroup.add("checkbox", undefined, "显示控制台日志");
             showLogCheckbox.helpTip = "开启后会在控制台显示每次操作的历史记录"
             showLogCheckbox.value = showConsoleLog; // 读取当前设置状态
-            var warningCheckbox = logGroup.add("checkbox", undefined, "替换字体后弹出脚本警告 🔔");
+            var warningCheckbox = logGroup.add("checkbox", undefined, "替换字体后弹出脚本警告");
             warningCheckbox.helpTip = "在每一次替换字体后都会弹出替换信息提示";
             warningCheckbox.value = showScriptWarning; // 使用全局变量
+            var commercialCheckbox = logGroup.add("checkbox", undefined, "可商用检测");
+            commercialCheckbox.helpTip = "启用后会在字体列表中显示字体的商用授权状态（✅可商用、❌不可商用、❓未知）";
+            commercialCheckbox.value = enableCommercialCheck; // 使用全局变量
+
+            // 可商用检测设置
+            var commercialGroup = titlePanel.add("group");
+            commercialGroup.orientation = "row";
+            commercialGroup.alignChildren = ["left", "center"];
+            commercialGroup.spacing = 10;
+            var commercialCheckbox = commercialGroup.add("checkbox", undefined, "可商用检测");
+            commercialCheckbox.helpTip = "启用后会在字体列表中显示商用状态标识，并支持免费字体下载功能";
+            commercialCheckbox.value = enableCommercialCheck; // 使用全局变量
 
             // 字体显示格式设置面板
             var displayPanel = titlePanel.add("panel", undefined, "🎨 字体显示格式设置");
@@ -735,6 +938,7 @@ app.bringToFront();
                 // 应用设置到全局变量
                 showConsoleLog = showLogCheckbox.value;
                 showScriptWarning = warningCheckbox.value;
+                enableCommercialCheck = commercialCheckbox.value;
 
                 // 保存显示格式选项设置
                 showFriendlyName = friendlyCheckbox.value;
@@ -836,8 +1040,10 @@ app.bringToFront();
             settingsWin.show();
         }
 
-        // ====================== UI ======================
-        var win = new Window("dialog", "🎨 文字图层字体查看与替换", undefined, { closeButton: true });
+        // ======================================================
+        // 用户界面模块 - 包含所有UI相关组件和交互逻辑
+        // ======================================================
+        var win = new Window("dialog", "🎨 文字图层字体查看与替换 v" + SCRIPT_VERSION, undefined, { closeButton: true });
         win.orientation = "column";
         win.alignChildren = ["fill", "top"];
 
@@ -940,7 +1146,7 @@ app.bringToFront();
 
 
         var fontList = win.add("listbox", undefined, [], { multiselect: true });
-        fontList.preferredSize = [500, 200];
+        fontList.preferredSize = [500, 300]; // 设置检测结果列表框大小为500x300像素
 
         // 添加自动选择相同字体的复选框和相关控件
         var autoSelectGroup = win.add("group");
@@ -1185,6 +1391,17 @@ app.bringToFront();
                 var psName = layer.textItem.font;
                 var friendlyName = getFriendlyFontName(psName);
 
+                // 可商用检测标识
+                var commercialStatus = "";
+                if (enableCommercialCheck && typeof checkCommercialUse === 'function') {
+                    var commercialInfo = checkCommercialUse(psName);
+                    if (commercialInfo && commercialInfo.isCommercial === true) {
+                        commercialStatus = "✅ "; // 可商用
+                    } else {
+                        commercialStatus = "❓ "; // 未知
+                    }
+                }
+
                 // 构建显示文本 - 根据displayOrder的顺序来组织显示内容
                 var displayParts = [];
 
@@ -1221,10 +1438,10 @@ app.bringToFront();
                 // 构建最终显示文本
                 var displayText;
                 if (displayParts.length > 0) {
-                    displayText = displayParts.join(" ");
+                    displayText = commercialStatus + displayParts.join(" ");
                 } else {
                     // 如果没有任何显示内容，使用友好字体名称和图层名称作为默认格式
-                    displayText = "(" + friendlyName + ") [" + layer.name + "]";
+                    displayText = commercialStatus + "(" + friendlyName + ") [" + layer.name + "]";
                 }
 
                 fontList.add("item", displayText);
@@ -1444,7 +1661,9 @@ app.bringToFront();
         win.show();
     }
 
-    // ====================== 执行 ======================
+    // ======================================================
+    // 脚本执行入口 - 启动主函数
+    // =====================================================
     fontViewerAndReplacer();
 
 })();
