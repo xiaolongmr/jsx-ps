@@ -1,0 +1,442 @@
+﻿// Split rows 功能的 UXP 脚本
+const { executeAsModal } = require("photoshop").core;
+const { batchPlay } = require("photoshop").action;
+const { app } = require("photoshop");
+const { LayerKind, ElementPlacement } = require("photoshop").constants;
+
+// 复制对象的深拷贝函数
+const deepCopy = (obj) => JSON.parse(JSON.stringify(obj));
+
+// 检查文本图层类型（点文本或段落文本）
+const getTextLayerType = async (layer) => {
+    try {
+        const layerId = layer.id;
+        const result = await batchPlay([{
+            _obj: "get",
+            _target: [
+                { _property: "textKey", _ref: "property" },
+                { _ref: "textLayer", _id: layerId }
+            ],
+            layerID: [layerId]
+        }], {});
+        
+        const textKey = result[0].textKey;
+        const textShape = textKey.textShape[0];
+        
+        // 检查是否有 bounds 属性来判断是否为段落文本
+        return textShape.hasOwnProperty('bounds') ? "paragraph" : "point";
+    } catch (error) {
+        console.log("检查文本类型时出错:", error);
+        return "unknown";
+    }
+};
+
+// 将段落文本转换为点文本
+const convertToPointText = async (layer) => {
+    try {
+        const layerId = layer.id;
+        await batchPlay([{
+            _obj: "set",
+            _target: [
+                { _property: "textType", _ref: "property" },
+                { _ref: "textLayer", _id: layerId }
+            ],
+            layerID: [layerId],
+            to: { _enum: "textType", _value: "point" }
+        }], {});
+        
+        return true;
+    } catch (error) {
+        console.log("转换文本类型时出错:", error);
+        return false;
+    }
+};
+
+// 选择图层
+const createSelectCommand = (layers) => {
+    let layerIds;
+    switch (layers.constructor.name) {
+        case "Layer":
+        case "Layer_Layer":
+            layerIds = [layers];
+            break;
+        case "Array":
+            layerIds = layers;
+            break;
+        default:
+            throw new Error("Only layers or arrays are accepted as arguments");
+    }
+    
+    const ids = layerIds.map(layer => layer.id);
+    return {
+        _obj: "select",
+        _target: [{ _ref: "layer", _id: ids[0] }],
+        layerID: ids,
+        makeVisible: false,
+        selectionModifier: {
+            _enum: "selectionModifierType",
+            _value: "addToSelectionContinuous"
+        }
+    };
+};
+
+// 对齐图层
+const alignLayers = async (layers, alignment) => {
+    const alignCommand = {
+        _obj: "align",
+        _target: [{ _enum: "ordinal", _ref: "layer" }],
+        alignToCanvas: false,
+        using: { _enum: "alignDistributeSelector", _value: alignment }
+    };
+    
+    await batchPlay([createSelectCommand(layers), alignCommand], {});
+};
+
+// 获取图层信息
+const getLayerInfo = async (layer) => {
+    const layerId = layer.id;
+    const result = await batchPlay([{
+        _obj: "get",
+        _target: [{ _ref: "layer", _id: layerId }],
+        layerID: [layerId],
+        _options: { dialogOptions: "dontDisplay" }
+    }], {});
+    return result[0];
+};
+
+// 取消图层链接
+const unlinkLayer = async (layer) => {
+    const layerId = layer.id;
+    await batchPlay([{
+        _obj: "unlinkSelectedLayers",
+        _target: [{ _ref: "textLayer", _id: layerId }],
+        layerID: [layerId]
+    }], {});
+};
+
+// 复制图层
+const duplicateLayer = async (layer) => {
+    let duplicatedLayer;
+    duplicatedLayer = await layer.duplicate(layer, ElementPlacement.PLACEAFTER) || 
+                     app.activeDocument.activeLayers[0];
+    return duplicatedLayer;
+};
+
+// 优化文本样式范围
+const optimizeTextStyleRange = (textStyleRange) => {
+    const ranges = [textStyleRange[0]];
+    for (let i = 1; i < textStyleRange.length; i++) {
+        const prev = textStyleRange[i - 1];
+        const curr = textStyleRange[i];
+        if (prev.from !== curr.from && prev.to !== curr.to) {
+            ranges.push(curr);
+        }
+    }
+    return ranges;
+};
+
+// 处理文本样式
+const processTextStyles = (textStyleRange) => {
+    const styles = deepCopy(textStyleRange);
+    let baseStyle;
+    
+    if ("baseParentStyle" in styles[0].textStyle) {
+        baseStyle = styles[0].textStyle.baseParentStyle;
+    }
+    
+    for (let i = 0; i < styles.length; i++) {
+        let style = styles[i];
+        
+        // 设置默认字距调整
+        if (style.textStyle.autoKern == null) {
+            style.textStyle.autoKern = { _enum: "autoKern", _value: "manual" };
+        }
+        
+        // 应用基础样式
+        if (style.textStyle.fontPostScriptName == null && baseStyle) {
+            ["fontName", "fontPostScriptName", "fontStyleName"].forEach(prop => {
+                if (baseStyle[prop]) {
+                    style.textStyle[prop] = baseStyle[prop];
+                }
+            });
+        }
+    }
+    return styles;
+};
+
+// 分割文本样式到行
+const splitTextStylesToRows = (textStyleRange, textContent, separator) => {
+    const processedStyles = processTextStyles(textStyleRange);
+    
+    // 创建字符到样式的映射
+    let charToStyleMap = [];
+    processedStyles.forEach((style, styleIndex) => {
+        const charCount = style.to - style.from;
+        charToStyleMap = charToStyleMap.concat(Array(charCount).fill(styleIndex));
+    });
+    
+    // 根据分隔符分割
+    let rowMaps = [];
+    if (separator == null) {
+        rowMaps = [charToStyleMap];
+    } else {
+        let position = 0;
+        const separatorLength = separator.length;
+        textContent.split(separator).forEach(segment => {
+            const start = position;
+            const end = start + segment.length;
+            rowMaps.push(charToStyleMap.slice(start, end));
+            position = end + separatorLength;
+        });
+    }
+    
+    // 为每行创建样式范围
+    return rowMaps.map(rowMap => {
+        let styleRanges = [];
+        let charPosition = 0;
+        
+        new Set(rowMap).forEach(styleIndex => {
+            let styleRange = deepCopy(processedStyles[styleIndex]);
+            const charCount = rowMap.filter(index => index === styleIndex).length;
+            styleRange.from = charPosition;
+            styleRange.to = styleRange.from + charCount;
+            charPosition += charCount;
+            styleRanges.push(styleRange);
+        });
+        
+        return styleRanges;
+    });
+};
+
+// 执行 Split Rows 功能
+const splitRowsFunction = async (executionContext, textLayer) => {
+    // 检查文本图层类型
+    const textType = await getTextLayerType(textLayer);
+    
+    // 如果是段落文本，转换为点文本
+    if (textType === "paragraph") {
+        const convertResult = await convertToPointText(textLayer);
+        if (!convertResult) {
+            await app.showAlert("无法将段落文本转换为点文本，请手动转换后重试。");
+            return;
+        }
+    }
+    
+    // 获取图层信息
+    const layerInfo = await getLayerInfo(textLayer);
+    
+    // 检查是否为文本图层
+    if (layerInfo.layerKind !== 3) {
+        await app.showAlert("目标不是文本图层，请选择文本图层后重试。");
+        return;
+    }
+    
+    const textData = deepCopy(layerInfo.textKey);
+    const layerId = textLayer.id;
+    const { protectAll, protectPosition } = layerInfo.layerLocking;
+    
+    // 检查图层是否可编辑
+    if (protectAll || protectPosition || !layerInfo.visible) {
+        await app.showAlert("图层不可编辑，请解锁图层后重试。");
+        return;
+    }
+    
+    // 检查是否有多行文本
+    if (/^[^\r]+\r?$/.test(textData.textKey)) {
+        await app.showAlert("请选择包含多行的文本图层。");
+        return;
+    }
+    
+    let alignment;
+    
+    // 如果有链接图层，先取消链接
+    if (layerInfo.linkedLayerIDs && layerInfo.linkedLayerIDs.length) {
+        await unlinkLayer(textLayer);
+    }
+    
+    // 确定对齐方向
+    alignment = textData.orientation._value === "horizontal" ? "ADSBottoms" : "ADSLefts";
+    
+    // 检查文本类型（现在应该已经是点文本了）
+    if (textData.textShape[0].char._value === "box") {
+        await app.showAlert("文本转换失败，请手动将段落文本转换为点文本后重试。");
+        return;
+    }
+    
+    const { textKey, kerningRange } = textData;
+    
+    // 处理段落样式
+    const paragraphRanges = textData.paragraphStyleRange.map(range => {
+        const { from, to, paragraphStyle } = range;
+        let style = deepCopy(paragraphStyle);
+        
+        // 设置默认行距
+        if (style.leadingType == null) {
+            style.leadingType = { _enum: "leadingType", _value: "leadingAbove" };
+        }
+        if (style.autoLeadingPercentage == null) {
+            style.autoLeadingPercentage = 1.75;
+        }
+        
+        let content = textKey.slice(from, to);
+        if (content.slice(-1) !== "\r") {
+            content += "\r";
+        }
+        
+        const relevantKerning = kerningRange.filter(k => k.from >= from && k.to <= to);
+        
+        return {
+            from,
+            to,
+            paragraphStyle: style,
+            contents: content,
+            kerningRange: relevantKerning
+        };
+    });
+    
+    // 优化并分割文本样式
+    const optimizedStyles = optimizeTextStyleRange(textData.textStyleRange);
+    const splitStyles = splitTextStylesToRows(optimizedStyles, textKey, "\r");
+    
+    // 为每个段落分配样式
+    paragraphRanges.forEach((paragraph, index) => {
+        paragraphRanges[index].textStyleRange = splitStyles[index];
+    });
+    
+    // 报告初始进度
+    executionContext.reportProgress({ value: 0 });
+    
+    const totalRows = paragraphRanges.length;
+    let newLayers = [];
+    
+    // 从最后一行开始处理（保持原始图层在最前面）
+    for (let i = totalRows - 1; i >= 0; i--) {
+        const paragraph = paragraphRanges[i];
+        const content = paragraph.contents.slice(0, -1); // 移除末尾的回车符
+        
+        // 跳过空白内容
+        if (/^\s*$/.test(content)) {
+            // 更新进度
+            executionContext.reportProgress({ value: (totalRows - i) / totalRows });
+            continue;
+        }
+        
+        // 创建新图层
+        const newLayer = await duplicateLayer(textLayer);
+        
+        // 调整字距
+        const adjustedKerning = paragraph.kerningRange.map(k => ({
+            ...k,
+            from: k.from - paragraph.from,
+            to: k.to - paragraph.from
+        }));
+        
+        // 设置新图层的文本内容
+        await batchPlay([
+            createSelectCommand(newLayer),
+            {
+                _obj: "set",
+                _target: [{ _enum: "ordinal", _ref: "textLayer" }],
+                to: {
+                    _obj: "textLayer",
+                    kerningRange: adjustedKerning.sort((a, b) => b.from - a.from),
+                    paragraphStyleRange: [{
+                        from: 0,
+                        to: paragraph.to - paragraph.from - 1,
+                        paragraphStyle: paragraph.paragraphStyle
+                    }],
+                    textKey: content,
+                    textStyleRange: paragraph.textStyleRange
+                }
+            }
+        ], {});
+        
+        // 对齐图层（除了第一行）
+        if (i > 0) {
+            await alignLayers([textLayer, newLayer], alignment);
+            
+            // 更新原始图层的内容
+            const remainingParagraphs = paragraphRanges.slice(0, i);
+            const remainingContent = remainingParagraphs.map(p => p.contents).join("");
+            const remainingStyles = splitTextStylesToRows(optimizedStyles, [remainingContent]).flat();
+            const remainingParagraphStyles = remainingParagraphs.map(p => ({
+                from: p.from,
+                to: p.to,
+                paragraphStyle: p.paragraphStyle
+            }));
+            
+            await batchPlay([{
+                _obj: "set",
+                _target: [{ _ref: "textLayer", _id: layerId }],
+                layerID: [layerId],
+                to: {
+                    _obj: "textLayer",
+                    kerningRange: kerningRange.slice(0, i),
+                    paragraphStyleRange: remainingParagraphStyles,
+                    textKey: remainingContent,
+                    textStyleRange: remainingStyles
+                }
+            }], {});
+        }
+        
+        newLayers.push(newLayer);
+        
+        // 更新进度
+        executionContext.reportProgress({ value: (totalRows - i) / totalRows });
+    }
+    
+    // 删除原始图层并选择新图层
+    await textLayer.delete();
+    await batchPlay([createSelectCommand(newLayers)], {});
+    
+    return newLayers;
+};
+
+// 主执行函数
+async function splitRowsCommand() {
+    try {
+        await executeAsModal(async (executionContext) => {
+            const activeDoc = app.activeDocument;
+            
+            // 检查是否有打开的文档
+            if (activeDoc == null) {
+                await app.showAlert("请先打开一个文档。");
+                return;
+            }
+            
+            // 获取选中的文本图层
+            const textLayers = activeDoc.activeLayers.filter(layer => layer.kind === LayerKind.TEXT);
+            
+            if (textLayers.length <= 0) {
+                await app.showAlert("请选择一个文本图层。");
+                return;
+            }
+            
+            // 获取历史记录控制器
+            const historyStateControl = executionContext.hostControl;
+            
+            // 暂停历史记录，将所有操作合并为一个历史步骤
+            const historyId = await historyStateControl.suspendHistory({
+                documentID: activeDoc.id,
+                name: "Split Rows"
+            });
+            
+            try {
+                // 执行分割行功能
+                await splitRowsFunction(executionContext, textLayers[0]);
+                
+            } finally {
+                // 恢复历史记录
+                historyStateControl.resumeHistory(historyId);
+            }
+            
+        }, { commandName: "Split Rows" });
+        
+    } catch (error) {
+        console.log(error);
+        await app.showAlert("执行过程中出现错误：" + error.message);
+    }
+}
+
+// 执行脚本
+await splitRowsCommand();

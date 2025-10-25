@@ -1,0 +1,296 @@
+﻿const { executeAsModal } = require("photoshop").core;
+const { batchPlay } = require("photoshop").action;
+const app = require("photoshop").app;
+
+async function togglePositionLock() {
+    const activeDocument = app.activeDocument;
+    const activeLayers = activeDocument.activeLayers; // 获取所有选中的图层
+    
+    if (!activeLayers || activeLayers.length === 0) {
+        console.log("没有选中的图层");
+        return;
+    }
+    
+    // 保存所有原始选中图层的ID，用于后续恢复选择
+    const originalLayerIds = activeLayers.map(layer => layer.id);
+    console.log(`原始选中图层数量: ${originalLayerIds.length}`);
+    console.log(`原始选中图层IDs: [${originalLayerIds.join(', ')}]`);
+    
+    // 处理每个选中的图层
+    for (let i = 0; i < activeLayers.length; i++) {
+        const activeLayer = activeLayers[i];
+        console.log(`\n处理第 ${i + 1} 个图层: "${activeLayer.name}" (ID: ${activeLayer.id})`);
+        
+        // 先选中当前要处理的图层
+        await selectLayerById(activeLayer.id);
+        
+        // 检查是否为图层组
+        if (activeLayer.kind === "group") {
+            console.log(`选中的是图层组: "${activeLayer.name}"`);
+            
+            // 记录组内所有图层的锁定状态
+            const layerStates = recordGroupLayersState(activeLayer);
+            
+            // 切换图层组的锁定状态
+            await toggleGroupLock(activeLayer);
+            
+            // 恢复组内图层的原始锁定状态
+            await restoreLayersState(layerStates);
+        } else {
+            console.log(`选中的是普通图层: "${activeLayer.name}"`);
+            // 对于普通图层，切换位置锁定状态
+            await toggleSingleLayerPositionLock(activeLayer);
+        }
+    }
+    
+    // 恢复原始的多选状态
+    await selectMultipleLayers(originalLayerIds);
+    console.log(`\n已恢复选择到原始的 ${originalLayerIds.length} 个图层`);
+}
+
+// 选择多个图层
+async function selectMultipleLayers(layerIds) {
+    if (!layerIds || layerIds.length === 0) {
+        return;
+    }
+    
+    try {
+        // 首先选中第一个图层
+        await selectLayerById(layerIds[0]);
+        
+        // 如果有多个图层，依次添加到选择中
+        for (let i = 1; i < layerIds.length; i++) {
+            await addLayerToSelection(layerIds[i]);
+        }
+        
+        console.log(`成功选择了 ${layerIds.length} 个图层`);
+    } catch (error) {
+        console.error("恢复多选状态时出错:", error);
+    }
+}
+
+// 添加图层到当前选择
+async function addLayerToSelection(layerId) {
+    try {
+        await batchPlay([
+            {
+                _obj: "select",
+                _target: [
+                    {
+                        _ref: "layer",
+                        _id: layerId
+                    }
+                ],
+                selectionModifier: {
+                    _enum: "selectionModifierType",
+                    _value: "addToSelection"
+                },
+                makeVisible: false,
+                _options: {
+                    dialogOptions: "dontDisplay"
+                }
+            }
+        ], {});
+    } catch (error) {
+        console.error(`添加图层ID ${layerId} 到选择时出错:`, error);
+    }
+}
+
+// 记录图层组内所有图层的锁定状态
+function recordGroupLayersState(group) {
+    const layerStates = [];
+    
+    // 递归函数，收集组内所有图层的状态
+    function collectLayerStates(parentGroup) {
+        for (const layer of parentGroup.layers) {
+            // 跳过当前组自身
+            if (layer.id === group.id) continue;
+            
+            // 记录图层状态
+            layerStates.push({
+                id: layer.id,
+                name: layer.name,
+                positionLocked: layer.positionLocked || false,
+                allLocked: layer.allLocked || false,
+                transparentPixelsLocked: layer.transparentPixelsLocked || false,
+                pixelsLocked: layer.pixelsLocked || false
+            });
+            
+            // 如果是子组，递归处理
+            if (layer.kind === "group") {
+                collectLayerStates(layer);
+            }
+        }
+    }
+    
+    collectLayerStates(group);
+    console.log(`已记录组内 ${layerStates.length} 个图层的锁定状态`);
+    return layerStates;
+}
+
+// 切换图层组的锁定状态
+async function toggleGroupLock(group) {
+    // 检查组是否已锁定
+    const isLocked = group.allLocked || false;
+    console.log(`图层组 "${group.name}" 当前锁定状态: ${isLocked}`);
+    
+    try {
+        // 直接使用batchPlay切换锁定状态
+        await batchPlay([
+            {
+                _obj: "applyLocking",
+                _target: [
+                    {
+                        _ref: "layer",
+                        _enum: "ordinal",
+                        _value: "targetEnum"
+                    }
+                ],
+                layerLocking: {
+                    _obj: "layerLocking",
+                    protectAll: !isLocked  // 切换为相反的锁定状态
+                },
+                _options: {
+                    dialogOptions: "dontDisplay"
+                }
+            }
+        ], {});
+        
+        console.log(`图层组 "${group.name}" 锁定状态已切换为: ${!isLocked}`);
+    } catch (error) {
+        console.error("切换图层组锁定状态时出错:", error);
+    }
+}
+
+// 恢复图层的原始锁定状态
+async function restoreLayersState(layerStates) {
+    const doc = app.activeDocument;
+    
+    for (const state of layerStates) {
+        try {
+            // 找到对应的图层
+            const layer = findLayerById(doc, state.id);
+            if (!layer) {
+                console.log(`未找到ID为 ${state.id} 的图层`);
+                continue;
+            }
+            
+            // 如果当前锁定状态与记录的不同，则恢复
+            if (layer.positionLocked !== state.positionLocked ||
+                layer.allLocked !== state.allLocked ||
+                layer.transparentPixelsLocked !== state.transparentPixelsLocked ||
+                layer.pixelsLocked !== state.pixelsLocked) {
+                
+                // 先选中该图层
+                await selectLayerById(state.id);
+                
+                // 恢复锁定状态
+                await batchPlay([
+                    {
+                        _obj: "applyLocking",
+                        _target: [
+                            {
+                                _ref: "layer",
+                                _enum: "ordinal",
+                                _value: "targetEnum"
+                            }
+                        ],
+                        layerLocking: {
+                            _obj: "layerLocking",
+                            protectAll: state.allLocked,
+                            protectPosition: state.positionLocked,
+                            protectTransparency: state.transparentPixelsLocked,
+                            protectComposite: state.pixelsLocked
+                        },
+                        _options: {
+                            dialogOptions: "dontDisplay"
+                        }
+                    }
+                ], {});
+                
+                console.log(`已恢复图层 "${state.name}" 的锁定状态`);
+            }
+        } catch (error) {
+            console.error(`恢复图层 "${state.name}" 状态时出错:`, error);
+        }
+    }
+}
+
+// 根据ID查找图层
+function findLayerById(doc, id) {
+    // 递归函数，在文档中查找指定ID的图层
+    function findInLayers(layers) {
+        for (const layer of layers) {
+            if (layer.id === id) {
+                return layer;
+            }
+            
+            if (layer.kind === "group" && layer.layers.length > 0) {
+                const found = findInLayers(layer.layers);
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+    
+    return findInLayers(doc.layers);
+}
+
+// 选择指定ID的图层
+async function selectLayerById(layerId) {
+    try {
+        await batchPlay([
+            {
+                _obj: "select",
+                _target: [
+                    {
+                        _ref: "layer",
+                        _id: layerId
+                    }
+                ],
+                makeVisible: false,
+                _isCommand: false,  // 添加这个标志
+                _options: {
+                    dialogOptions: "dontDisplay"
+                }
+            }
+        ], {});
+    } catch (error) {
+        console.error(`选择图层ID ${layerId} 时出错:`, error);
+    }
+}
+
+// 处理单个图层的位置锁定切换
+async function toggleSingleLayerPositionLock(layer) {
+    const isPositionLocked = layer.positionLocked;
+    console.log(`图层 "${layer.name}" 当前位置锁定状态: ${isPositionLocked}`);
+    
+    await batchPlay([
+        {
+            _obj: "applyLocking",
+            _target: [
+                {
+                    _ref: "layer",
+                    _enum: "ordinal",
+                    _value: "targetEnum"
+                }
+            ],
+            layerLocking: {
+                _obj: "layerLocking",
+                protectPosition: !isPositionLocked
+            },
+            _options: {
+                dialogOptions: "dontDisplay"
+            }
+        }
+    ], {});
+    
+    console.log(`图层 "${layer.name}" 位置锁定状态已切换为: ${!isPositionLocked}`);
+}
+
+async function runModalFunction() {
+    await executeAsModal(togglePositionLock, {"commandName": "Toggle Position Lock"});
+}
+
+// 执行脚本
+await runModalFunction();
