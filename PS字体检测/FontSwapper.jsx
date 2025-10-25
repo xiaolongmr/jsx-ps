@@ -476,7 +476,7 @@ app.bringToFront();
         function createSettingsObject() {
             return {
                 developer_message: "本脚本开源，欢迎使用，玩的开心",
-                author_website: "blog.z-l.top",
+                author_website: "https://blog.z-l.top",
                 original_release: "https://getquicker.net/Sharedaction?code=6471ed9b-8254-443d-0267-08ddf9bab61f",
                 version: SCRIPT_VERSION,
                 last_update_date: LAST_UPDATE_DATE,
@@ -492,8 +492,8 @@ app.bringToFront();
                     enableCommercialCheck: enableCommercialCheck,
                     githubFontDataUrl: githubFontDataUrl,
                     fontDataVersion: fontDataVersion,
-                    customCommercialStatus: customCommercialStatus || "【可商用】",
-                    customUnknownStatus: customUnknownStatus || "【X 商用】",
+                    customCommercialStatus: customCommercialStatus,
+                    customUnknownStatus: customUnknownStatus,
                 }
             };
         }
@@ -508,7 +508,7 @@ app.bringToFront();
             file.close();
 
             if (showAlert) {
-                alert("设置已保存到桌面 (JSON格式): " + file.fsName);
+                alert("设置已保存 (JSON格式): " + file.fsName);
             }
         }
 
@@ -1141,7 +1141,7 @@ app.bringToFront();
 
             var commercialStatusInput = commercialStatusGroup.add("edittext", undefined, customCommercialStatus || "【可商用】");
             commercialStatusInput.preferredSize = [120, 24]; // 增加宽度和高度
-            commercialStatusInput.helpTip = "输入要显示的可商用状态符号或文本，默认为✅";
+            commercialStatusInput.helpTip = "输入要显示的可商用状态符号或文本，默认为【可商用】";
 
             // 为可商用状态输入框添加实时更新事件
             commercialStatusInput.onChange = function () {
@@ -1157,7 +1157,7 @@ app.bringToFront();
 
             var unknownStatusInput = commercialStatusGroup.add("edittext", undefined, customUnknownStatus || "【X 商用】");
             unknownStatusInput.preferredSize = [120, 24]; // 增加宽度和高度
-            unknownStatusInput.helpTip = "输入要显示的未知状态符号或文本，默认为❓";
+            unknownStatusInput.helpTip = "输入要显示的未知状态符号或文本，默认为【X 商用】";
 
             // 为未知状态输入框添加实时更新事件
             unknownStatusInput.onChange = function () {
@@ -1168,16 +1168,10 @@ app.bringToFront();
                 }
             };
 
-            // 添加第一行提示文本
-            var statusHelpText1 = commercialStatusPanel.add("statictext", undefined, "提示：您可以输入任意字符（如emoji、文字、符号等）来自定义显示内容");
-            statusHelpText1.graphics.font = ScriptUI.newFont("dialog", "Regular", 11);
-            statusHelpText1.graphics.foregroundColor = statusHelpText1.graphics.newPen(statusHelpText1.graphics.PenType.SOLID_COLOR, [0.7, 0.7, 0.7], 1);
-
-            // 添加第二行提示文本
-            var statusHelpText2 = commercialStatusPanel.add("statictext", undefined, "未知状态只是代表猫啃网没有该字体，并不100%代表不可商用");
-            statusHelpText2.graphics.font = ScriptUI.newFont("dialog", "Regular", 11);
-            statusHelpText2.graphics.foregroundColor = statusHelpText2.graphics.newPen(statusHelpText2.graphics.PenType.SOLID_COLOR, [0.7, 0.7, 0.7], 1);
-            // 两行文本的样式已在上面设置
+            // 添加提示文本
+            var statusHelpText = commercialStatusPanel.add("statictext", undefined, "未知状态只是代表猫啃网没有该字体，并不100%代表不可商用");
+            statusHelpText.graphics.font = ScriptUI.newFont("dialog", "Regular", 11);
+            statusHelpText.graphics.foregroundColor = statusHelpText.graphics.newPen(statusHelpText.graphics.PenType.SOLID_COLOR, [0.7, 0.7, 0.7], 1);
 
             // 添加排序方式改变事件
             sortDropdown.onChange = function () {
@@ -1212,14 +1206,13 @@ app.bringToFront();
 
             // 使用可滚动的编辑文本框来显示完整的使用说明（包含标题和内容，适中行间距）
             var usageContent = usageContainer.add("edittext", undefined,
-                "🖱️ 图层多选操作：\n\n" +
-                "   Ctrl + 点击：选择不连续的多个图层\n" +
-                "   Shift + 点击：选择连续的多个图层\n" +
-                "   勾选自动选择：点击图层时自动选中所有相同字体的图层\n" +
-                "   设置面板：可自定义字体显示格式和排序方式\n" +
-                "   好用请给点个赞吧: \n" +
-                "https://getquicker.net/Sharedaction?code=6471ed9b-8254-443d-0267-08ddf9bab61f \n" +
-                "   更多功能说明将在后续版本中添加...",
+                "🖱️ 图层多选操作：\n" +
+                "  • Ctrl + 点击： 选择不连续的多个图层\n" +
+                "  • Shift + 点击：选择连续的多个图层\n" +
+                "\n" +
+                "⚙️ 设置面板功能：\n" +
+                "  • 可自定义字体显示格式和排序方式",
+
                 { multiline: true, readonly: true, scrolling: true });
             usageContent.graphics.font = ScriptUI.newFont("dialog", "Regular", 11); // 11号普通字体
             usageContent.preferredSize.width = 340;
@@ -1323,7 +1316,7 @@ app.bringToFront();
                     displayOrder = ["friendly", "content"];
                     updateOrderList();
 
-                    alert("设置已恢复为初始状态！");
+                    alert("设置已恢复到初始状态！");
                 }
             };
 

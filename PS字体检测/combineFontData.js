@@ -11,6 +11,10 @@ const path = require('path');
 
 // 配置部分 - 用户可自定义
 // 字段名称配置 - 使用驼峰命名法，符合互联网大厂编码规范
+const config = {
+    minifyJson: true  // 是否将JSON压缩成一行（true为压缩，false为格式化）
+};
+
 const fieldNames = {
     fontPsName: "fontPsName",    // 字体在PS中的名称
     fontFamily: "fontFamily",    // 字体系列
@@ -32,18 +36,18 @@ const outputStructure = {
     type: 'group',
     field: fieldNames.fontPsName,
     children: [
-        fieldNames.fontFamily,
-        fieldNames.creator,
-        fieldNames.releaseDate,
-        fieldNames.version,
-        fieldNames.category,
-        fieldNames.fontWeight,
-        fieldNames.simplifiedCharCount,
-        {
-            type: 'nested',
-            field: fieldNames.license,
-            children: [fieldNames.licenseUrl]
-        },
+        // fieldNames.fontFamily,
+        // fieldNames.creator,
+        // fieldNames.releaseDate,
+        // fieldNames.version,
+        // fieldNames.category,
+        // fieldNames.fontWeight,
+        // fieldNames.simplifiedCharCount,
+        // {
+        //     type: 'nested',
+        //     field: fieldNames.license,
+        //     children: [fieldNames.licenseUrl]
+        // },
         fieldNames.url
     ]
 };
@@ -243,8 +247,10 @@ if (outputStructure.type === 'group') {
 }
 
 // 将JSON保存到文件
-const jsonContent = JSON.stringify(fontData, null, 2);
+// 根据配置决定是否压缩JSON
+const jsonContent = JSON.stringify(fontData, null, config.minifyJson ? 0 : 2);
 const outputFile = path.resolve(__dirname, "猫啃网免费字体合集.json");
+console.log(`JSON输出模式：${config.minifyJson ? '压缩模式（单行）' : '格式化模式（缩进）'}`);
 
 try {
     // 明确指定utf-8编码写入文件
