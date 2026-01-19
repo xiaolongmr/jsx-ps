@@ -14,8 +14,8 @@ app.bringToFront();
     // ======================================================
     // 全局变量区域 - 所有全局配置变量集中在此
     // ======================================================
-    var SCRIPT_VERSION = "2.3"; // 脚本版本号，统一管理所有版本显示
-    var LAST_UPDATE_DATE = "2025.10.21"; // 最后更新时间，与README.md中的全局变量保持一致
+    var SCRIPT_VERSION = "2.4"; // 脚本版本号，统一管理所有版本显示
+    var LAST_UPDATE_DATE = "2026.01.20"; // 最后更新时间，与README.md中的全局变量保持一致
     var showConsoleLog = true; // 默认显示控制台日志
     var layerSortOrder = "document"; // 图层排序：document(文档顺序), font(字体分组), frequency(字体出现次数)
     var showScriptWarning = false; // 默认不弹出脚本警告
@@ -1734,16 +1734,21 @@ app.bringToFront();
                 // 第一步：按照图层顺序从上到下检测，记录字体首次出现位置并分组
                 for (var i = 0; i < sortedLayers.length; i++) {
                     var layer = sortedLayers[i];
-                    var font = layer.textItem.font;
+                    var font = "";
+                    try {
+                        font = layer.textItem.font;
 
-                    // 记录字体首次出现的位置
-                    if (!(font in fontFirstAppearance)) {
-                        fontFirstAppearance[font] = i;
-                        fontGroups[font] = [];
+                        // 记录字体首次出现的位置
+                        if (!(font in fontFirstAppearance)) {
+                            fontFirstAppearance[font] = i;
+                            fontGroups[font] = [];
+                        }
+
+                        // 将图层添加到对应字体分组
+                        fontGroups[font].push(layer);
+                    } catch (e) {
+                        logMessage("警告：图层" + layer.name + "没有textItem或font属性: " + e.toString());
                     }
-
-                    // 将图层添加到对应字体分组
-                    fontGroups[font].push(layer);
                 }
 
                 // 第二步：按字体首次出现顺序重新排列
@@ -1775,15 +1780,25 @@ app.bringToFront();
                 // 按文档中字体出现次数排序：先统计每种字体的出现次数，然后按次数排序
                 var fontCounts = {};
                 for (var i = 0; i < sortedLayers.length; i++) {
-                    var font = sortedLayers[i].textItem.font;
-                    fontCounts[font] = (fontCounts[font] || 0) + 1;
+                    try {
+                        var font = sortedLayers[i].textItem.font;
+                        fontCounts[font] = (fontCounts[font] || 0) + 1;
+                    } catch (e) {
+                        logMessage("警告：图层" + sortedLayers[i].name + "没有textItem或font属性: " + e.toString());
+                    }
                 }
 
                 sortedLayers.sort(function (a, b) {
-                    var fontA = a.textItem.font;
-                    var fontB = b.textItem.font;
-                    var countA = fontCounts[fontA];
-                    var countB = fontCounts[fontB];
+                    var fontA = "";
+                var fontB = "";
+                try {
+                    fontA = a.textItem.font;
+                    fontB = b.textItem.font;
+                } catch (e) {
+                    logMessage("警告：排序时图层没有textItem或font属性: " + e.toString());
+                }
+                var countA = fontCounts[fontA] || 0;
+                var countB = fontCounts[fontB] || 0;
 
                     // 按出现次数降序排序（次数多的在前）
                     if (countA !== countB) {
@@ -1804,8 +1819,17 @@ app.bringToFront();
             // 左侧列表显示每个文字图层的字体信息
             for (var i = 0; i < sortedLayers.length; i++) {
                 var layer = sortedLayers[i];
-                var psName = layer.textItem.font;
-                var friendlyName = getFriendlyFontName(psName);
+                var psName = "";
+                var friendlyName = "";
+                try {
+                    psName = layer.textItem.font;
+                    friendlyName = getFriendlyFontName(psName);
+                } catch (e) {
+                    // 处理图层没有textItem或font属性的情况
+                    psName = "未知字体";
+                    friendlyName = "未知字体";
+                    logMessage("警告：图层" + layer.name + "没有textItem或font属性: " + e.toString());
+                }
 
                 // 可商用检测标识
                 var commercialStatus = "";
@@ -1888,8 +1912,13 @@ app.bringToFront();
             for (var i = 0; i < fontList.items.length; i++) {
                 if (fontList.items[i].selected) {
                     selectedCount++;
-                    var fontName = sortedLayers[i].textItem.font;
-                    selectedFonts[fontName] = true;
+                    var fontName = "";
+                    try {
+                        fontName = sortedLayers[i].textItem.font;
+                        selectedFonts[fontName] = true;
+                    } catch (e) {
+                        logMessage("警告：统计选中图层时图层" + sortedLayers[i].name + "没有textItem或font属性: " + e.toString());
+                    }
                 }
             }
 
@@ -1908,8 +1937,13 @@ app.bringToFront();
 
             // 统计文档中的总字体种类
             for (var i = 0; i < sortedLayers.length; i++) {
-                var fontName = sortedLayers[i].textItem.font;
-                totalFonts[fontName] = true;
+                var fontName = "";
+                try {
+                    fontName = sortedLayers[i].textItem.font;
+                    totalFonts[fontName] = true;
+                } catch (e) {
+                    logMessage("警告：统计总字体时图层" + sortedLayers[i].name + "没有textItem或font属性: " + e.toString());
+                }
             }
 
             var uniqueFontCount = 0;

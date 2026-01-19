@@ -1,14 +1,117 @@
 //@target illustrator
 app.preferences.setBooleanPreference('ShowExternalJSXWarning', false); // 避免外部脚本警告
 
+// ===== JSON Polyfill (兼容旧版本ExtendScript) =====
+// 强制添加JSON对象支持
+JSON = JSON || {
+  parse: function(jsonString) {
+    try {
+      return eval('(' + jsonString + ')');
+    } catch (e) {
+      return {};
+    }
+  },
+  stringify: function(obj) {
+    if (obj === null) {
+      return 'null';
+    }
+    if (obj === undefined) {
+      return 'undefined';
+    }
+    if (typeof obj === 'string') {
+      return '"' + obj.replace(/"/g, '\\"') + '"';
+    }
+    if (typeof obj === 'number' || typeof obj === 'boolean') {
+      return obj.toString();
+    }
+    if (typeof obj === 'function') {
+      return undefined;
+    }
+    if (typeof obj === 'object') {
+      var isArray = obj.constructor === Array;
+      var result = [];
+      if (isArray) {
+        for (var i = 0; i < obj.length; i++) {
+          var item = JSON.stringify(obj[i]);
+          if (item !== undefined) {
+            result.push(item);
+          }
+        }
+        return '[' + result.join(',') + ']';
+      } else {
+        for (var key in obj) {
+          if (obj.hasOwnProperty(key)) {
+            var value = JSON.stringify(obj[key]);
+            if (value !== undefined) {
+              result.push('"' + key + '":' + value);
+            }
+          }
+        }
+        return '{' + result.join(',') + '}';
+      }
+    }
+    return '""';
+  }
+};
+
 // ===== 配置管理系统 =====
+// 获取用户文档路径函数
+function getUserDocumentsPath() {
+  try {
+    // Windows系统使用环境变量
+    if ($.os.indexOf("Windows") !== -1) {
+      var docPath = $.getenv("USERPROFILE") + "/Documents";
+      if (Folder(docPath).exists) {
+        return docPath;
+      }
+    }
+    
+    // 尝试使用Folder.documents
+    if (typeof Folder.documents !== "undefined" && Folder.documents !== null) {
+      return Folder.documents.fsName;
+    }
+    
+    // 尝试使用Folder.userDocuments
+    if (typeof Folder.userDocuments !== "undefined" && Folder.userDocuments !== null) {
+      return Folder.userDocuments.fsName;
+    }
+    
+    // 尝试使用~/Documents
+    var defaultPath = Folder("~/Documents");
+    if (defaultPath.exists) {
+      return defaultPath.fsName;
+    }
+    
+    // Mac系统使用AppleScript
+    if ($.os.indexOf("Mac") !== -1) {
+      try {
+        var macPath = app.doScript('tell application "Finder" to get POSIX path of (path to documents folder from user domain)', ScriptLanguage.APPLESCRIPT_LANGUAGE);
+        if (Folder(macPath).exists) {
+          return macPath;
+        }
+      } catch (e) {
+        // AppleScript失败，继续尝试
+      }
+    }
+    
+    // 所有方法都失败，返回默认路径
+    return "~/Documents";
+  } catch (e) {
+    // 出现异常，返回默认路径
+    return "~/Documents";
+  }
+}
 // 配置文件路径
-var CONFIG_FOLDER = new Folder(Folder.userData + "/AdobeJSXScripts/AddPageNumbers");
-var CONFIG_FILE = new File(CONFIG_FOLDER + "/config.json");
+var CONFIG_FILE = new File(getUserDocumentsPath() + "/Quicker/添加页码/AI添加页码.json");
 
 // 创建配置文件夹
+var CONFIG_FOLDER = CONFIG_FILE.parent;
 if (!CONFIG_FOLDER.exists) {
-    CONFIG_FOLDER.create();
+    try {
+        CONFIG_FOLDER.create();
+    } catch (e) {
+        // 创建文件夹失败，不影响脚本运行
+    }
 }
 
 // 保存配置到文件
@@ -49,15 +152,14 @@ function getDefaultConfig() {
         alignment: "center", // left, center, right
         bindingAlignment: "normal",  // normal, outer, inner
         pageDigits: "auto",  // auto, 2, 3
-        footerContent: "*page*",
-        timeFormat: "24h"  // 新增：24h 或 12h
+        footerContent: "*page*"
     };
 }
 
 // 应用配置到UI
 function applyConfigToUI(config, ddFont, txtFontSize, txtMargins, radTop, radMiddle, radBottom, 
                           radLeft, radCenter, radRight, radBindingNormal, radBindingOuter, 
-                          radBindingInner, ddPageDigits, txtFooter, rad24h, rad12h) {
+                          radBindingInner, ddPageDigits, txtFooter) {
     try {
         txtFontSize.text = String(config.fontSize || 16);
         txtMargins.text = String(config.margins || 5);
@@ -95,13 +197,6 @@ function applyConfigToUI(config, ddFont, txtFontSize, txtMargins, radTop, radMid
             default: ddPageDigits.selection = 0; break;
         }
         
-        // 时间格式（新增）
-        if (config.timeFormat === "12h") {
-            rad12h.value = true;
-        } else {
-            rad24h.value = true;
-        }
-        
         txtFooter.text = config.footerContent || "*page*";
     } catch (e) {
         // 配置应用失败，使用默认值
@@ -111,12 +206,11 @@ function applyConfigToUI(config, ddFont, txtFontSize, txtMargins, radTop, radMid
 // 从UI获取当前配置
 function getConfigFromUI(ddFont, txtFontSize, txtMargins, radTop, radMiddle, radBottom, 
                           radLeft, radCenter, radRight, radBindingNormal, radBindingOuter, 
-                          radBindingInner, ddPageDigits, txtFooter, rad24h, rad12h) {
+                          radBindingInner, ddPageDigits, txtFooter) {
     var location = radTop.value ? "top" : (radMiddle.value ? "middle" : "bottom");
     var alignment = radLeft.value ? "left" : (radRight.value ? "right" : "center");
     var bindingAlignment = radBindingOuter.value ? "outer" : (radBindingInner.value ? "inner" : "normal");
     var pageDigits = ddPageDigits.selection.index === 1 ? "2" : (ddPageDigits.selection.index === 2 ? "3" : "auto");
-    var timeFormat = rad12h.value ? "12h" : "24h";  // 新增：获取时间格式选择
     
     return {
         fontSize: parseInt(txtFontSize.text) || 16,
@@ -126,8 +220,7 @@ function getConfigFromUI(ddFont, txtFontSize, txtMargins, radTop, radMiddle, rad
         alignment: alignment,
         bindingAlignment: bindingAlignment,
         pageDigits: pageDigits,
-        footerContent: txtFooter.text,
-        timeFormat: timeFormat  // 新增
+        footerContent: txtFooter.text
     };
 }
 
@@ -292,7 +385,7 @@ try { // 添加顶层try-catch块来捕获启动错误
         var savedConfig = loadConfig();
         applyConfigToUI(savedConfig, ddFont, txtFontSize, txtMargins, radTop, radMiddle, radBottom, 
                         radLeft, radCenter, radRight, radBindingNormal, radBindingOuter, 
-                        radBindingInner, ddPageDigits, txtFooter, rad24h, rad12h);
+                        radBindingInner, ddPageDigits, txtFooter);
 
         // --- 页脚内容设置 ---
         var panelFooter = mainGroup.add("panel", undefined, "页码内容 (可输入文本和变量)");
@@ -306,11 +399,12 @@ try { // 添加顶层try-catch块来捕获启动错误
         var btnPage = grpVars.add("button", undefined, "页码");
         var btnPages = grpVars.add("button", undefined, "总页数");
         var btnDate = grpVars.add("button", undefined, "日期");
-        var btnTime = grpVars.add("button", undefined, "时间");
+        var btnTime24h = grpVars.add("button", undefined, "时间24h");
+        var btnTime12h = grpVars.add("button", undefined, "时间12h");
         var btnFullName = grpVars.add("button", undefined, "完整路径");
         var btnFile = grpVars.add("button", undefined, "文件名");
         var btnClear = grpVars.add("button", undefined, "清空");
-        btnPage.size = btnPages.size = btnDate.size = btnTime.size = btnFullName.size = btnFile.size = btnClear.size = [60, 24];
+        btnPage.size = btnPages.size = btnDate.size = btnTime24h.size = btnTime12h.size = btnFullName.size = btnFile.size = btnClear.size = [60, 24];
 
         var txtFooter = panelFooter.add("edittext", undefined, "*page*"); // 默认值更改为 *page*
         txtFooter.characters = 50;
@@ -387,7 +481,8 @@ try { // 添加顶层try-catch块来捕获启动错误
 
                 var totalPages = idoc.artboards.length; // 总画板数量
                 var datee = getdate();
-                var timee = rad12h.value ? gettime12h() : gettime24h();  // 根据用户选择的格式获取时间
+                var time24h = gettime24h();  // 获取24小时制时间
+                var time12h = gettime12h();  // 获取12小时制时间
                 var fname = idoc.saved ? decodeURI(idoc.fullName.fsName) : "未保存文档";
                 var file = idoc.saved ? decodeURI(idoc.name) : "未保存文档";
 
@@ -398,7 +493,9 @@ try { // 添加顶层try-catch块来捕获启动错误
                 footerPagesTemplate = footerPagesTemplate.replace(/\*pages\*/g, totalPages);
                 footerPagesTemplate = footerPagesTemplate.replace(/\*file\*/g, file);
                 footerPagesTemplate = footerPagesTemplate.replace(/\*date\*/g, datee);
-                footerPagesTemplate = footerPagesTemplate.replace(/\*time\*/g, timee);
+                footerPagesTemplate = footerPagesTemplate.replace(/\*time24h\*/g, time24h);  // 24小时制时间
+                footerPagesTemplate = footerPagesTemplate.replace(/\*time12h\*/g, time12h);  // 12小时制时间
+                footerPagesTemplate = footerPagesTemplate.replace(/\*time\*/g, time24h);  // 向后兼容，默认使用24小时制
                 footerPagesTemplate = footerPagesTemplate.replace(/\*page\*/g, "***PAGE_NUMBER_PLACEHOLDER***");  // 用占位符
                 txtInfo.text += "页码内容模板处理完成。\n";
 
@@ -595,7 +692,7 @@ try { // 添加顶层try-catch块来捕获启动错误
             try {
                 var currentConfig = getConfigFromUI(ddFont, txtFontSize, txtMargins, radTop, radMiddle, radBottom, 
                                                      radLeft, radCenter, radRight, radBindingNormal, radBindingOuter, 
-                                                     radBindingInner, ddPageDigits, txtFooter, rad24h, rad12h);
+                                                     radBindingInner, ddPageDigits, txtFooter);
                 if (saveConfig(currentConfig)) {
                     txtInfo.text += "✓ 配置已保存！下次打开脚本时将自动加载。\n";
                 } else {
@@ -693,9 +790,13 @@ try { // 添加顶层try-catch块来捕获启动错误
             footer("*date*");
             txtInfo.text += "已添加变量: *date*\n";
         };
-        btnTime.onClick = function() {
-            footer("*time*");
-            txtInfo.text += "已添加变量: *time*\n";
+        btnTime24h.onClick = function() {
+            footer("*time24h*");
+            txtInfo.text += "已添加变量: *time24h*\n";
+        };
+        btnTime12h.onClick = function() {
+            footer("*time12h*");
+            txtInfo.text += "已添加变量: *time12h*\n";
         };
         btnFullName.onClick = function() {
             footer("*fname*");
