@@ -1,6 +1,136 @@
 //@target illustrator
 app.preferences.setBooleanPreference('ShowExternalJSXWarning', false); // 避免外部脚本警告
 
+// ===== 配置管理系统 =====
+// 配置文件路径
+var CONFIG_FOLDER = new Folder(Folder.userData + "/AdobeJSXScripts/AddPageNumbers");
+var CONFIG_FILE = new File(CONFIG_FOLDER + "/config.json");
+
+// 创建配置文件夹
+if (!CONFIG_FOLDER.exists) {
+    CONFIG_FOLDER.create();
+}
+
+// 保存配置到文件
+function saveConfig(configData) {
+    try {
+        var configStr = JSON.stringify(configData, null, 2);
+        CONFIG_FILE.open("w");
+        CONFIG_FILE.write(configStr);
+        CONFIG_FILE.close();
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+// 从文件加载配置
+function loadConfig() {
+    try {
+        if (CONFIG_FILE.exists) {
+            CONFIG_FILE.open("r");
+            var configStr = CONFIG_FILE.read();
+            CONFIG_FILE.close();
+            return JSON.parse(configStr);
+        }
+    } catch (e) {
+        // 配置文件不存在或损坏，返回默认值
+    }
+    return getDefaultConfig();
+}
+
+// 获取默认配置
+function getDefaultConfig() {
+    return {
+        fontSize: 16,
+        margins: 5,
+        fontIndex: 0,
+        location: "bottom",  // top, middle, bottom
+        alignment: "center", // left, center, right
+        bindingAlignment: "normal",  // normal, outer, inner
+        pageDigits: "auto",  // auto, 2, 3
+        footerContent: "*page*",
+        timeFormat: "24h"  // 新增：24h 或 12h
+    };
+}
+
+// 应用配置到UI
+function applyConfigToUI(config, ddFont, txtFontSize, txtMargins, radTop, radMiddle, radBottom, 
+                          radLeft, radCenter, radRight, radBindingNormal, radBindingOuter, 
+                          radBindingInner, ddPageDigits, txtFooter, rad24h, rad12h) {
+    try {
+        txtFontSize.text = String(config.fontSize || 16);
+        txtMargins.text = String(config.margins || 5);
+        
+        if (ddFont.items.length > 0) {
+            var fontIndex = Math.min(config.fontIndex || 0, ddFont.items.length - 1);
+            ddFont.selection = fontIndex;
+        }
+        
+        // 位置
+        switch (config.location) {
+            case "top": radTop.value = true; break;
+            case "middle": radMiddle.value = true; break;
+            default: radBottom.value = true; break;
+        }
+        
+        // 对齐
+        switch (config.alignment) {
+            case "left": radLeft.value = true; break;
+            case "right": radRight.value = true; break;
+            default: radCenter.value = true; break;
+        }
+        
+        // 装订对齐
+        switch (config.bindingAlignment) {
+            case "outer": radBindingOuter.value = true; break;
+            case "inner": radBindingInner.value = true; break;
+            default: radBindingNormal.value = true; break;
+        }
+        
+        // 页码位数
+        switch (config.pageDigits) {
+            case "2": ddPageDigits.selection = 1; break;
+            case "3": ddPageDigits.selection = 2; break;
+            default: ddPageDigits.selection = 0; break;
+        }
+        
+        // 时间格式（新增）
+        if (config.timeFormat === "12h") {
+            rad12h.value = true;
+        } else {
+            rad24h.value = true;
+        }
+        
+        txtFooter.text = config.footerContent || "*page*";
+    } catch (e) {
+        // 配置应用失败，使用默认值
+    }
+}
+
+// 从UI获取当前配置
+function getConfigFromUI(ddFont, txtFontSize, txtMargins, radTop, radMiddle, radBottom, 
+                          radLeft, radCenter, radRight, radBindingNormal, radBindingOuter, 
+                          radBindingInner, ddPageDigits, txtFooter, rad24h, rad12h) {
+    var location = radTop.value ? "top" : (radMiddle.value ? "middle" : "bottom");
+    var alignment = radLeft.value ? "left" : (radRight.value ? "right" : "center");
+    var bindingAlignment = radBindingOuter.value ? "outer" : (radBindingInner.value ? "inner" : "normal");
+    var pageDigits = ddPageDigits.selection.index === 1 ? "2" : (ddPageDigits.selection.index === 2 ? "3" : "auto");
+    var timeFormat = rad12h.value ? "12h" : "24h";  // 新增：获取时间格式选择
+    
+    return {
+        fontSize: parseInt(txtFontSize.text) || 16,
+        margins: parseInt(txtMargins.text) || 5,
+        fontIndex: ddFont.selection ? ddFont.selection.index : 0,
+        location: location,
+        alignment: alignment,
+        bindingAlignment: bindingAlignment,
+        pageDigits: pageDigits,
+        footerContent: txtFooter.text,
+        timeFormat: timeFormat  // 新增
+    };
+}
+
 // 核心函数：在Illustrator中打开指定URL (用户提供)
 function openURL(url) {
     try {
@@ -30,8 +160,8 @@ try { // 添加顶层try-catch块来捕获启动错误
         win.spacing = 15;
         win.margins = 15;
 
-        // 设置默认透明度 (95%)
-        win.opacity = 0.95; 
+        // 设置默认透明度 (99%)
+        win.opacity = 0.99; 
 
         // --- 顶部控制区域 ---
         var mainGroup = win.add("group");
@@ -158,6 +288,12 @@ try { // 添加顶层try-catch块来捕获启动错误
             artboardList.items[i].selected = true; // 默认全部选中
         }
 
+        // ===== 加载保存的配置 =====
+        var savedConfig = loadConfig();
+        applyConfigToUI(savedConfig, ddFont, txtFontSize, txtMargins, radTop, radMiddle, radBottom, 
+                        radLeft, radCenter, radRight, radBindingNormal, radBindingOuter, 
+                        radBindingInner, ddPageDigits, txtFooter, rad24h, rad12h);
+
         // --- 页脚内容设置 ---
         var panelFooter = mainGroup.add("panel", undefined, "页码内容 (可输入文本和变量)");
         panelFooter.orientation = "column";
@@ -199,6 +335,7 @@ try { // 添加顶层try-catch块来捕获启动错误
         actionButtonsGroup.spacing = 15;
         actionButtonsGroup.margins = [0, 10, 0, 0];
 
+        var btnSaveConfig = actionButtonsGroup.add("button", undefined, "保存配置");
         var btnAbout = actionButtonsGroup.add("button", undefined, "关于脚本");
         var btnPreview = actionButtonsGroup.add("button", undefined, "预览页码");
         var btnOk = actionButtonsGroup.add("button", undefined, "生成页码");
@@ -227,191 +364,209 @@ try { // 添加顶层try-catch块来捕获启动错误
                 throw new Error("没有打开的文档。");
             }
 
-            var targetLayerName = is_preview ? "预览页码层" : "页码层";
-            
-            // 删除旧的当前目标层（如果存在）
+            // ===== 性能优化：禁用自动重绘 =====
+            var origRedrawMode = idoc.redrawEnabled;
+            idoc.redrawEnabled = false;
+
             try {
-                var existingLayer = idoc.layers[targetLayerName];
-                existingLayer.remove();
-                txtInfo.text += "已删除旧的 '" + targetLayerName + "' 图层。\n";
-            } catch (e) {
-                // 图层不存在，无需处理
-            }
-            
-            // 创建新的目标层
-            var ilayer = idoc.layers.add();
-            ilayer.name = targetLayerName;
-            txtInfo.text += "创建新的 '" + targetLayerName + "' 图层。\n";
-
-            var totalPages = idoc.artboards.length; // 总画板数量
-            var datee = getdate();
-            var timee = gettime();
-            var fname = idoc.saved ? decodeURI(idoc.fullName.fsName) : "未保存文档";
-            var file = idoc.saved ? decodeURI(idoc.name) : "未保存文档";
-
-            txtInfo.text += "正在处理页码内容模板...\n";
-            var footerPagesTemplate = txtFooter.text.replace(/\*pages\*/g, totalPages);
-            footerPagesTemplate = footerPagesTemplate.replace(/\*date\*/g, datee);
-            footerPagesTemplate = footerPagesTemplate.replace(/\*time\*/g, timee);
-            footerPagesTemplate = footerPagesTemplate.replace(/\*fname\*/g, fname);
-            footerPagesTemplate = footerPagesTemplate.replace(/\*file\*/g, file);
-            txtInfo.text += "页码内容模板处理完成。\n";
-
-            // 将mm转换为点 (1英寸 = 72点, 1英寸 = 25.4mm)
-            var margins = (Number(txtMargins.text) / 25.4) * 72;
-            if (isNaN(margins) || margins < 0) {
-                margins = (5 / 25.4) * 72; // 默认5mm
-                txtInfo.text += "警告：边缘输入无效，已使用默认值 5 mm。\n";
-            } else {
-                txtInfo.text += "边缘距离设置为: " + Number(txtMargins.text).toFixed(2) + " mm。\n";
-            }
-
-            // 获取选中的字体名称 (这里仍是友好名称)
-            var selectedFontDisplayName = ddFont.selection.text; 
-            var selectedFontSize = parseFloat(txtFontSize.text);
-
-            if (isNaN(selectedFontSize) || selectedFontSize <= 0) {
-                selectedFontSize = 16; // 默认字号16pt
-                txtInfo.text += "警告：字号输入无效或小于等于0，已使用默认字号 16 点。\n";
-            } else {
-                txtInfo.text += "字号设置为: " + selectedFontSize + " 点。\n";
-            }
-            txtInfo.text += "字体设置为: " + selectedFontDisplayName + "。\n";
-
-
-            var selectedArtboardIndices = [];
-            for (var i = 0; i < artboardList.items.length; i++) {
-                if (artboardList.items[i].selected) {
-                    selectedArtboardIndices.push(i);
+                var targetLayerName = is_preview ? "预览页码层" : "页码层";
+                
+                // 删除旧的当前目标层（如果存在）
+                try {
+                    var existingLayer = idoc.layers[targetLayerName];
+                    existingLayer.remove();
+                    txtInfo.text += "已删除旧的 '" + targetLayerName + "' 图层。\n";
+                } catch (e) {
+                    // 图层不存在，无需处理
                 }
-            }
+                
+                // 创建新的目标层
+                var ilayer = idoc.layers.add();
+                ilayer.name = targetLayerName;
+                txtInfo.text += "创建新的 '" + targetLayerName + "' 图层。\n";
 
-            if (selectedArtboardIndices.length === 0) {
-                throw new Error("未选择任何画板。请至少选择一个画板来添加页码。");
-            } else {
-                txtInfo.text += "已选择 " + selectedArtboardIndices.length + " 个画板。\n";
-            }
+                var totalPages = idoc.artboards.length; // 总画板数量
+                var datee = getdate();
+                var timee = rad12h.value ? gettime12h() : gettime24h();  // 根据用户选择的格式获取时间
+                var fname = idoc.saved ? decodeURI(idoc.fullName.fsName) : "未保存文档";
+                var file = idoc.saved ? decodeURI(idoc.name) : "未保存文档";
 
-            var actualPageNumber = 1; // 用于页码变量 *page* 的实际页码计数
+                txtInfo.text += "正在处理页码内容模板...\n";
+                // 使用安全的替换顺序：先替换多字符变量，再替换单字符，避免嵌套问题
+                var footerPagesTemplate = txtFooter.text;
+                footerPagesTemplate = footerPagesTemplate.replace(/\*fname\*/g, fname);  // 最长的变量
+                footerPagesTemplate = footerPagesTemplate.replace(/\*pages\*/g, totalPages);
+                footerPagesTemplate = footerPagesTemplate.replace(/\*file\*/g, file);
+                footerPagesTemplate = footerPagesTemplate.replace(/\*date\*/g, datee);
+                footerPagesTemplate = footerPagesTemplate.replace(/\*time\*/g, timee);
+                footerPagesTemplate = footerPagesTemplate.replace(/\*page\*/g, "***PAGE_NUMBER_PLACEHOLDER***");  // 用占位符
+                txtInfo.text += "页码内容模板处理完成。\n";
 
-            for (var i = 0; i < idoc.artboards.length; i += 1) {
-                if (arrayContains(selectedArtboardIndices, i)) {
-                    var currentPageNumberFormatted = String(actualPageNumber);
-                    var selectedDigitOption = ddPageDigits.selection.text;
+                // 将mm转换为点 (1英寸 = 72点, 1英寸 = 25.4mm)
+                var marginsMM = Number(txtMargins.text);
+                var margins = (marginsMM / 25.4) * 72;
+                if (isNaN(margins) || marginsMM < 0 || marginsMM > 100) {
+                    margins = (5 / 25.4) * 72; // 默认5mm
+                    var invalidReason = isNaN(margins) ? "格式错误" : (marginsMM < 0 ? "不能为负数" : "不能超过100mm");
+                    txtInfo.text += "边缘值 " + invalidReason + "，已使用默认值 5mm。\n";
+                } else {
+                    txtInfo.text += "边缘: " + marginsMM.toFixed(2) + "mm。\n";
+                }
 
-                    if (selectedDigitOption.indexOf("2位") !== -1) {
-                        currentPageNumberFormatted = padZero(actualPageNumber, 2);
-                    } else if (selectedDigitOption.indexOf("3位") !== -1) {
-                        currentPageNumberFormatted = padZero(actualPageNumber, 3);
+                // 获取选中的字体名称 (这里仍是友好名称)
+                var selectedFontDisplayName = ddFont.selection.text; 
+                var selectedFontSize = parseFloat(txtFontSize.text);
+
+                if (isNaN(selectedFontSize) || selectedFontSize <= 0 || selectedFontSize > 200) {
+                    selectedFontSize = 16; // 默认字号16pt
+                    var fontSizeReason = isNaN(selectedFontSize) ? "格式错误" : (selectedFontSize <= 0 ? "必须大于0" : "不能超过200pt");
+                    txtInfo.text += "字号 " + fontSizeReason + "，已使用默认值 16pt。\n";
+                } else {
+                    txtInfo.text += "字号: " + selectedFontSize + "pt。\n";
+                }
+                txtInfo.text += "字体设置为: " + selectedFontDisplayName + "。\n";
+
+
+                var selectedArtboardIndices = [];
+                for (var i = 0; i < artboardList.items.length; i++) {
+                    if (artboardList.items[i].selected) {
+                        selectedArtboardIndices.push(i);
                     }
-                    
-                    var footerPageContent = footerPagesTemplate.replace(/\*page\*/g, currentPageNumberFormatted);
+                }
 
-                    var itext = ilayer.textFrames.add();
-                    itext.contents = footerPageContent;
+                if (selectedArtboardIndices.length === 0) {
+                    throw new Error("未选择任何画板。请至少选择一个画板来添加页码。");
+                } else {
+                    txtInfo.text += "已选择 " + selectedArtboardIndices.length + " 个画板。\n";
+                }
 
-                    try {
-                        // 通过 friendlyFontName 查找真正的 textFont 对象
-                        // 需要遍历 textFonts 找到匹配 friendlyFontName 的字体对象
-                        var fontToApply = null;
-                        for (var j = 0; j < textFonts.length; j++) {
-                            if ((textFonts[j].family + " " + textFonts[j].style) === selectedFontDisplayName) {
-                                fontToApply = textFonts[j];
-                                break;
+                var actualPageNumber = 1; // 用于页码变量 *page* 的实际页码计数
+
+                for (var i = 0; i < idoc.artboards.length; i += 1) {
+                    if (arrayContains(selectedArtboardIndices, i)) {
+                        var currentPageNumberFormatted = String(actualPageNumber);
+                        var selectedDigitOption = ddPageDigits.selection.text;
+
+                        if (selectedDigitOption.indexOf("2位") !== -1) {
+                            currentPageNumberFormatted = padZero(actualPageNumber, 2);
+                        } else if (selectedDigitOption.indexOf("3位") !== -1) {
+                            currentPageNumberFormatted = padZero(actualPageNumber, 3);
+                        }
+                        
+                        // 使用占位符替换，避免嵌套问题
+                        var footerPageContent = footerPagesTemplate.replace(/\*\*\*PAGE_NUMBER_PLACEHOLDER\*\*\*/g, currentPageNumberFormatted);
+
+                        var itext = ilayer.textFrames.add();
+                        itext.contents = footerPageContent;
+
+                        try {
+                            // 通过 friendlyFontName 查找真正的 textFont 对象
+                            // 需要遍历 textFonts 找到匹配 friendlyFontName 的字体对象
+                            var fontToApply = null;
+                            for (var j = 0; j < textFonts.length; j++) {
+                                if ((textFonts[j].family + " " + textFonts[j].style) === selectedFontDisplayName) {
+                                    fontToApply = textFonts[j];
+                                    break;
+                                }
+                            }
+
+                            if (fontToApply) {
+                                itext.textRange.characterAttributes.textFont = fontToApply;
+                            } else {
+                                 txtInfo.text += "警告：无法找到与显示名称 '" + selectedFontDisplayName + "' 匹配的字体，将使用默认字体。\n";
+                            }
+                        } catch (e) {
+                            txtInfo.text += "警告：设置字体时发生错误：" + e.message + "，将使用默认字体。\n";
+                        }
+                        itext.textRange.characterAttributes.size = selectedFontSize;
+
+                        var fontSize = itext.textRange.characterAttributes.size;
+
+                        var activeAB = idoc.artboards[i];
+                        var iartBounds = activeAB.artboardRect;
+
+                        var ableft = iartBounds[0] + margins;
+                        var abtop = iartBounds[1] - margins;
+                        var abright = iartBounds[2] - margins;
+                        var abbottom = iartBounds[3] + margins + fontSize;
+
+                        var abcenter_horizontal = ableft + ((abright - ableft) / 2); // 水平居中
+                        var abcenter_vertical = iartBounds[1] - (iartBounds[1] - iartBounds[3]) / 2 + fontSize / 2; // 垂直居中，加上字号一半使其基线居中
+
+                        // --- 页码对齐逻辑 ---
+                        var currentJustification = Justification.LEFT;
+                        var currentHorizontalPos = ableft;
+                        var currentVerticalPos = abbottom; // 默认底部
+                        var alignmentLog = "";
+
+                        // 优先判断装订对齐
+                        if (radBindingOuter.value) { // 外侧对齐
+                            var isOddPage = (actualPageNumber % 2 !== 0); // 判断是否为奇数页 (1, 3, 5...)
+                            if (isOddPage) { // 奇数页（如右页）
+                                currentJustification = Justification.RIGHT;
+                                currentHorizontalPos = abright;
+                                alignmentLog = "装订对齐 - 外侧对齐 (奇数页 右)";
+                            } else { // 偶数页（如左页）
+                                currentJustification = Justification.LEFT;
+                                currentHorizontalPos = ableft;
+                                alignmentLog = "装订对齐 - 外侧对齐 (偶数页 左)";
+                            }
+                        } else if (radBindingInner.value) { // 内侧对齐
+                            var isOddPage = (actualPageNumber % 2 !== 0); // 判断是否为奇数页 (1, 3, 5...)
+                            if (isOddPage) { // 奇数页（如左页）
+                                currentJustification = Justification.LEFT;
+                                currentHorizontalPos = ableft;
+                                alignmentLog = "装订对齐 - 内侧对齐 (奇数页 左)";
+                            } else { // 偶数页（如右页）
+                                currentJustification = Justification.RIGHT;
+                                currentHorizontalPos = abright;
+                                alignmentLog = "装订对齐 - 内侧对齐 (偶数页 右)";
+                            }
+                        } else { // 关闭装订对齐，使用常规对齐
+                            if (radRight.value) {
+                                currentJustification = Justification.RIGHT;
+                                currentHorizontalPos = abright;
+                                alignmentLog = "常规对齐 - 右对齐";
+                            } else if (radCenter.value) {
+                                currentJustification = Justification.CENTER;
+                                currentHorizontalPos = abcenter_horizontal;
+                                alignmentLog = "常规对齐 - 居中";
+                            } else { // 默认左对齐
+                                currentJustification = Justification.LEFT;
+                                currentHorizontalPos = ableft;
+                                alignmentLog = "常规对齐 - 左对齐";
                             }
                         }
 
-                        if (fontToApply) {
-                            itext.textRange.characterAttributes.textFont = fontToApply;
-                        } else {
-                             txtInfo.text += "警告：无法找到与显示名称 '" + selectedFontDisplayName + "' 匹配的字体，将使用默认字体。\n";
+                        itext.left = currentHorizontalPos;
+                        itext.textRange.paragraphAttributes.justification = currentJustification;
+
+                        // 垂直位置
+                        if (radTop.value) {
+                            currentVerticalPos = abtop;
+                            alignmentLog += ", 位置: 顶部。";
+                        } else if (radMiddle.value) { // 新增中间选项
+                            currentVerticalPos = abcenter_vertical;
+                            alignmentLog += ", 位置: 中间。";
+                        } else { // 默认底部
+                            currentVerticalPos = abbottom;
+                            alignmentLog += ", 位置: 底部。";
                         }
-                    } catch (e) {
-                        txtInfo.text += "警告：设置字体时发生错误：" + e.message + "，将使用默认字体。\n";
+                        itext.top = currentVerticalPos;
+
+                        txtInfo.text += "正在为画板 " + (i + 1) + " 添加页码 (" + alignmentLog + ")\n";
+
+                        actualPageNumber++; // 只有在添加了页码的画板上才增加实际页码
+                    } else {
+                        txtInfo.text += "跳过未选中的画板 " + (i + 1) + "。\n";
                     }
-                    itext.textRange.characterAttributes.size = selectedFontSize;
-
-                    var fontSize = itext.textRange.characterAttributes.size;
-
-                    var activeAB = idoc.artboards[i];
-                    var iartBounds = activeAB.artboardRect;
-
-                    var ableft = iartBounds[0] + margins;
-                    var abtop = iartBounds[1] - margins;
-                    var abright = iartBounds[2] - margins;
-                    var abbottom = iartBounds[3] + margins + fontSize;
-
-                    var abcenter_horizontal = ableft + ((abright - ableft) / 2); // 水平居中
-                    var abcenter_vertical = iartBounds[1] - (iartBounds[1] - iartBounds[3]) / 2 + fontSize / 2; // 垂直居中，加上字号一半使其基线居中
-
-                    // --- 页码对齐逻辑 ---
-                    var currentJustification = Justification.LEFT;
-                    var currentHorizontalPos = ableft;
-                    var currentVerticalPos = abbottom; // 默认底部
-                    var alignmentLog = "";
-
-                    // 优先判断装订对齐
-                    if (radBindingOuter.value) { // 外侧对齐
-                        var isOddPage = (actualPageNumber % 2 !== 0); // 判断是否为奇数页 (1, 3, 5...)
-                        if (isOddPage) { // 奇数页（如右页）
-                            currentJustification = Justification.RIGHT;
-                            currentHorizontalPos = abright;
-                            alignmentLog = "装订对齐 - 外侧对齐 (奇数页 右)";
-                        } else { // 偶数页（如左页）
-                            currentJustification = Justification.LEFT;
-                            currentHorizontalPos = ableft;
-                            alignmentLog = "装订对齐 - 外侧对齐 (偶数页 左)";
-                        }
-                    } else if (radBindingInner.value) { // 内侧对齐
-                        var isOddPage = (actualPageNumber % 2 !== 0); // 判断是否为奇数页 (1, 3, 5...)
-                        if (isOddPage) { // 奇数页（如左页）
-                            currentJustification = Justification.LEFT;
-                            currentHorizontalPos = ableft;
-                            alignmentLog = "装订对齐 - 内侧对齐 (奇数页 左)";
-                        } else { // 偶数页（如右页）
-                            currentJustification = Justification.RIGHT;
-                            currentHorizontalPos = abright;
-                            alignmentLog = "装订对齐 - 内侧对齐 (偶数页 右)";
-                        }
-                    } else { // 关闭装订对齐，使用常规对齐
-                        if (radRight.value) {
-                            currentJustification = Justification.RIGHT;
-                            currentHorizontalPos = abright;
-                            alignmentLog = "常规对齐 - 右对齐";
-                        } else if (radCenter.value) {
-                            currentJustification = Justification.CENTER;
-                            currentHorizontalPos = abcenter_horizontal;
-                            alignmentLog = "常规对齐 - 居中";
-                        } else { // 默认左对齐
-                            currentJustification = Justification.LEFT;
-                            currentHorizontalPos = ableft;
-                            alignmentLog = "常规对齐 - 左对齐";
-                        }
-                    }
-
-                    itext.left = currentHorizontalPos;
-                    itext.textRange.paragraphAttributes.justification = currentJustification;
-
-                    // 垂直位置
-                    if (radTop.value) {
-                        currentVerticalPos = abtop;
-                        alignmentLog += ", 位置: 顶部。";
-                    } else if (radMiddle.value) { // 新增中间选项
-                        currentVerticalPos = abcenter_vertical;
-                        alignmentLog += ", 位置: 中间。";
-                    } else { // 默认底部
-                        currentVerticalPos = abbottom;
-                        alignmentLog += ", 位置: 底部。";
-                    }
-                    itext.top = currentVerticalPos;
-
-                    txtInfo.text += "正在为画板 " + (i + 1) + " 添加页码 (" + alignmentLog + ")\n";
-
-                    actualPageNumber++; // 只有在添加了页码的画板上才增加实际页码
-                } else {
-                    txtInfo.text += "跳过未选中的画板 " + (i + 1) + "。\n";
                 }
+                
+            } finally {
+                // ===== 性能优化：恢复自动重绘 =====
+                idoc.redrawEnabled = origRedrawMode;
             }
+            
             app.redraw();
             txtInfo.text += "所有选定画板的页码已添加。刷新 Illustrator 视图。\n";
         }
@@ -435,7 +590,22 @@ try { // 添加顶层try-catch块来捕获启动错误
             }
             win.layout.layout(true);
         };
-
+        // "保存配置"按钮事件
+        btnSaveConfig.onClick = function() {
+            try {
+                var currentConfig = getConfigFromUI(ddFont, txtFontSize, txtMargins, radTop, radMiddle, radBottom, 
+                                                     radLeft, radCenter, radRight, radBindingNormal, radBindingOuter, 
+                                                     radBindingInner, ddPageDigits, txtFooter, rad24h, rad12h);
+                if (saveConfig(currentConfig)) {
+                    txtInfo.text += "✓ 配置已保存！下次打开脚本时将自动加载。\n";
+                } else {
+                    txtInfo.text += "✗ 配置保存失败，请检查权限。\n";
+                }
+            } catch (e) {
+                txtInfo.text += "保存配置时出错：" + e.toString() + "\n";
+            }
+            win.layout.layout(true);
+        };
         // “预览页码”按钮事件
         btnPreview.onClick = function() {
             txtInfo.text = "正在生成页码预览...\n";
@@ -710,20 +880,48 @@ function getdate() {
     return datemdy;
 }
 
-function gettime() {
+function gettime24h() {
     var time = new Date();
     var hours = time.getHours();
     var minutes = time.getMinutes();
     var seconds = time.getSeconds();
+    // 24小时制
+    if (hours < 10) {
+        hours = "0" + hours;
+    }
     if (minutes < 10) {
         minutes = "0" + minutes;
     }
     if (seconds < 10) {
         seconds = "0" + seconds;
     }
-    var ampm = (hours > 11) ? "PM" : "AM";
+    var curtime = hours + ":" + minutes + ":" + seconds;
+    return curtime;
+}
+
+function gettime12h() {
+    var time = new Date();
+    var hours = time.getHours();
+    var minutes = time.getMinutes();
+    var seconds = time.getSeconds();
+    // 12小时制
+    if (minutes < 10) {
+        minutes = "0" + minutes;
+    }
+    if (seconds < 10) {
+        seconds = "0" + seconds;
+    }
+    var ampm = (hours >= 12) ? "PM" : "AM";
     hours = hours % 12;
     hours = hours ? hours : 12;
+    if (hours < 10) {
+        hours = "0" + hours;
+    }
     var curtime = hours + ":" + minutes + ":" + seconds + " " + ampm;
     return curtime;
+}
+
+function gettime() {
+    // 保持向后兼容，默认使用24小时制
+    return gettime24h();
 }
