@@ -25,7 +25,7 @@ app.bringToFront();
     var fontData = null; // 存储字体数据的全局变量
     var fontDataVersion = null; // 存储字体数据版本
     var fontDataFile = null; // 字体数据文件路径
-    var githubFontDataUrl = "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS字体检测/猫啃网免费字体合集.json" //"https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/PS字体检测/猫啃网免费字体合集.json"; // GitHub字体数据URL（用户需要替换为实际URL）
+    var githubFontDataUrl = "https://gh-proxy.org/https://github.com/xiaolongmr/jsx-ps/blob/main/PS%E5%AD%97%E4%BD%93%E6%A3%80%E6%B5%8B/%E7%8C%AB%E5%95%83%E7%BD%91%E5%85%8D%E8%B4%B9%E5%AD%97%E4%BD%93%E5%90%88%E9%9B%86.json" //"https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/PS字体检测/猫啃网免费字体合集.json"; // GitHub字体数据URL（用户需要替换为实际URL）
 
     // ======================================================
     // 辅助函数模块 - 包含通用工具函数
@@ -117,7 +117,7 @@ app.bringToFront();
                     showScriptWarning = settings.showScriptWarning !== undefined ? settings.showScriptWarning : false;
                     displayOrder = settings.displayOrder || ["content", "friendly"];
                     enableCommercialCheck = settings.enableCommercialCheck !== undefined ? settings.enableCommercialCheck : true;
-                    githubFontDataUrl = settings.githubFontDataUrl || "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS字体检测/猫啃网免费字体合集.json";
+                    githubFontDataUrl = settings.githubFontDataUrl || "https://gh-proxy.org/https://github.com/xiaolongmr/jsx-ps/blob/main/PS%E5%AD%97%E4%BD%93%E6%A3%80%E6%B5%8B/%E7%8C%AB%E5%95%83%E7%BD%91%E5%85%8D%E8%B4%B9%E5%AD%97%E4%BD%93%E5%90%88%E9%9B%86.json";
                     fontDataVersion = settings.fontDataVersion || null;
                     customCommercialStatus = settings.customCommercialStatus || "【可商用】"; // 加载自定义可商用状态显示
                     customUnknownStatus = settings.customUnknownStatus || "【X 商用】"; // 加载自定义未知状态显示
@@ -136,7 +136,7 @@ app.bringToFront();
         showPostScriptName = false;
         showScriptWarning = false;
         enableCommercialCheck = true;
-        githubFontDataUrl = "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS字体检测/猫啃网免费字体合集.json";
+        githubFontDataUrl = "https://gh-proxy.org/https://github.com/xiaolongmr/jsx-ps/blob/main/PS%E5%AD%97%E4%BD%93%E6%A3%80%E6%B5%8B/%E7%8C%AB%E5%95%83%E7%BD%91%E5%85%8D%E8%B4%B9%E5%AD%97%E4%BD%93%E5%90%88%E9%9B%86.json";
         fontDataVersion = null;
         displayOrder = ["content", "friendly"];
         customCommercialStatus = "【可商用】"; // 可商用默认显示
