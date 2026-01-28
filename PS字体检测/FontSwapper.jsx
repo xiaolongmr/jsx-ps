@@ -1,10 +1,6 @@
 // Photoshop 字体检测与替换工具
 // 功能：查看并批量替换Photoshop文档中的字体，支持多种排序和显示格式
-// 作者：小张
-// 作者网站: https://blog.z-l.top/
-// GitHub地址: https://github.com/xiaolongmr/jsx-ps/tree/main/PS字体检测
-// 详细使用说明请查看: https://github.com/xiaolongmr/jsx-ps/blob/main/PS字体检测/README.md
-// 详细说明文件地址：https://raw.githubusercontent.com/xiaolongmr/jsx-ps/main/PS字体检测/README.md
+// 作者：爱吃馍的小张
 
 #target photoshop
 app.bringToFront();
@@ -22,7 +18,7 @@ app.bringToFront();
     var showFriendlyName = true; // 显示友好字体名称
     var showLayerContent = true; // 显示文字内容（图层名称）
     var showPostScriptName = false; // 显示PostScript名称
-    var displayOrder = ["friendly", "content"]; // 显示顺序：friendly=友好名称, content=文字内容
+    var displayOrder = ["content", "friendly"]; // 显示顺序：friendly=友好名称, content=文字内容
     var enableCommercialCheck = true; // 默认启用可商用检测
 
     // 商用字体数据相关变量
@@ -119,7 +115,7 @@ app.bringToFront();
                     showLayerContent = settings.showLayerContent !== undefined ? settings.showLayerContent : true;
                     showPostScriptName = settings.showPostScriptName !== undefined ? settings.showPostScriptName : false;
                     showScriptWarning = settings.showScriptWarning !== undefined ? settings.showScriptWarning : false;
-                    displayOrder = settings.displayOrder || ["friendly", "content"];
+                    displayOrder = settings.displayOrder || ["content", "friendly"];
                     enableCommercialCheck = settings.enableCommercialCheck !== undefined ? settings.enableCommercialCheck : true;
                     githubFontDataUrl = settings.githubFontDataUrl || "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS字体检测/猫啃网免费字体合集.json";
                     fontDataVersion = settings.fontDataVersion || null;
@@ -142,7 +138,7 @@ app.bringToFront();
         enableCommercialCheck = true;
         githubFontDataUrl = "https://cdn.jsdelivr.net/gh/xiaolongmr/jsx-ps/PS字体检测/猫啃网免费字体合集.json";
         fontDataVersion = null;
-        displayOrder = ["friendly", "content"];
+        displayOrder = ["content", "friendly"];
         customCommercialStatus = "【可商用】"; // 可商用默认显示
         customUnknownStatus = "【X 商用】"; // 未知默认显示
         return false;
@@ -931,7 +927,7 @@ app.bringToFront();
                 }
 
                 // 检查是否有新启用的选项需要添加
-                var allPossibleOptions = ["friendly", "content", "postscript"];
+                var allPossibleOptions = ["content", "friendly", "postscript"];
                 for (var i = 0; i < allPossibleOptions.length; i++) {
                     var option = allPossibleOptions[i];
                     var isEnabled = false;
@@ -1313,7 +1309,7 @@ app.bringToFront();
                     sortDropdown.selection = 0; // 文档顺序
 
                     // 恢复显示顺序为默认值
-                    displayOrder = ["friendly", "content"];
+                    displayOrder = ["content", "friendly"];
                     updateOrderList();
 
                     alert("设置已恢复到初始状态！");
@@ -1332,7 +1328,7 @@ app.bringToFront();
                     sortDropdown.selection = 0; // 文档顺序
 
                     // 重置显示顺序为默认值
-                    displayOrder = ["friendly", "content"];
+                    displayOrder = ["content", "friendly"];
 
                     // 重置自定义商用状态显示
                     if (typeof commercialStatusInput !== 'undefined' && commercialStatusInput) {
@@ -1388,7 +1384,7 @@ app.bringToFront();
 
         // 按钮状态管理（三状态循环：打赏 -> 点赞 -> 关注 -> 打赏）
         var buttonState = 0; // 0: 打赏模式, 1: 点赞模式, 2: 关注模式
-        var donateURL = "https://getquicker.net/DonateAuthor?serial=388875&nickname=%E6%98%9F%E6%B2%B3%E5%9F%8E%E9%87%8E%E2%9D%A4";
+        var donateURL = "https://getquicker.net/DonateAuthor?serial=388875&nickname=%E7%88%B1%E5%90%83%E9%A6%8D%E7%9A%84%E5%B0%8F%E5%BC%A0";
         var likeURL = "https://getquicker.net/Sharedaction?code=6471ed9b-8254-443d-0267-08ddf9bab61f";
         var followURL = "https://open.weixin.qq.com/qr/code?username=gh_3ff7a91772aa";
 
