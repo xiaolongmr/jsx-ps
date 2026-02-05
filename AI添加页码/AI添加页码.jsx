@@ -1,6 +1,9 @@
 //@target illustrator
 app.preferences.setBooleanPreference('ShowExternalJSXWarning', false); // 避免外部脚本警告
 
+// ===== 版本信息 =====
+var SCRIPT_VERSION = "v1.11";
+
 // ===== JSON Polyfill (兼容旧版本ExtendScript) =====
 // 强制添加JSON对象支持
 if (typeof JSON === 'undefined') {
@@ -260,7 +263,7 @@ function openURL(url) {
 try { // 添加顶层try-catch块来捕获启动错误
     if (app.documents.length > 0) {
         // 使用 "dialog" 类型窗口，这是模态的，但更稳定
-        var win = new Window("dialog", "添加页码 v2.1 - 小张出品"); 
+        var win = new Window("dialog", "添加页码 " + SCRIPT_VERSION + " —— 告别传统方式，直接在AI中快速为您的说明书，书本，画册插入页码"); 
         win.orientation = "column";
         win.alignChildren = "fill";
         win.spacing = 15;
@@ -382,7 +385,7 @@ try { // 添加顶层try-catch块来捕获启动错误
         ddPageDigits.selection = 0; // Default to "自动"
 
         // 右侧选择画板面板
-        var panelArtboards = topControlsGroup.add("panel", undefined, "选择画板 (勾选添加页码)");
+        var panelArtboards = topControlsGroup.add("panel", undefined, "选择要插入的画板 (Shift连续加选，Ctrl单独加减选)");
         panelArtboards.orientation = "column";
         panelArtboards.alignChildren = "fill";
         var artboardList = panelArtboards.add("ListBox", [0,0,250,350], [], {multiselect: true, scrolling: true}); // 扩大列表框
@@ -977,7 +980,7 @@ try { // 添加顶层try-catch块来捕获启动错误
 
 
     } else {
-        alert("请打开一个文档以运行添加页码 v2.1。");
+        alert("请打开一个文档以运行添加页码  " + SCRIPT_VERSION + " 。");
     }
 } catch (e) { // 捕获顶层错误
     // 这里的 alert 是为了在脚本完全崩溃前尽可能给出提示
