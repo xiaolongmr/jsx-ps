@@ -3,61 +3,74 @@ app.preferences.setBooleanPreference('ShowExternalJSXWarning', false); // 避免
 
 // ===== JSON Polyfill (兼容旧版本ExtendScript) =====
 // 强制添加JSON对象支持
-JSON = JSON || {
-  parse: function(jsonString) {
-    try {
-      return eval('(' + jsonString + ')');
-    } catch (e) {
-      return {};
-    }
-  },
-  stringify: function(obj) {
-    if (obj === null) {
-      return 'null';
-    }
-    if (obj === undefined) {
-      return 'undefined';
-    }
-    if (typeof obj === 'string') {
-      return '"' + obj.replace(/"/g, '\\"') + '"';
-    }
-    if (typeof obj === 'number' || typeof obj === 'boolean') {
-      return obj.toString();
-    }
-    if (typeof obj === 'function') {
-      return undefined;
-    }
-    if (typeof obj === 'object') {
-      var isArray = obj.constructor === Array;
-      var result = [];
-      if (isArray) {
-        for (var i = 0; i < obj.length; i++) {
-          var item = JSON.stringify(obj[i]);
-          if (item !== undefined) {
-            result.push(item);
-          }
-        }
-        return '[' + result.join(',') + ']';
-      } else {
-        for (var key in obj) {
-          if (obj.hasOwnProperty(key)) {
-            var value = JSON.stringify(obj[key]);
-            if (value !== undefined) {
-              result.push('"' + key + '":' + value);
+if (typeof JSON === 'undefined') {
+  JSON = {
+    parse: function(jsonString) {
+      try {
+        return eval('(' + jsonString + ')');
+      } catch (e) {
+        return {};
+      }
+    },
+    stringify: function(obj) {
+      if (obj === null) {
+        return 'null';
+      }
+      if (obj === undefined) {
+        return 'undefined';
+      }
+      if (typeof obj === 'string') {
+        return '"' + obj.replace(/"/g, '\\"') + '"';
+      }
+      if (typeof obj === 'number' || typeof obj === 'boolean') {
+        return obj.toString();
+      }
+      if (typeof obj === 'function') {
+        return undefined;
+      }
+      if (typeof obj === 'object') {
+        var isArray = obj.constructor === Array;
+        var result = [];
+        if (isArray) {
+          for (var i = 0; i < obj.length; i++) {
+            var item = JSON.stringify(obj[i]);
+            if (item !== undefined) {
+              result.push(item);
             }
           }
+          return '[' + result.join(',') + ']';
+        } else {
+          for (var key in obj) {
+            if (obj.hasOwnProperty(key)) {
+              var value = JSON.stringify(obj[key]);
+              if (value !== undefined) {
+                result.push('"' + key + '":' + value);
+              }
+            }
+          }
+          return '{' + result.join(',') + '}';
         }
-        return '{' + result.join(',') + '}';
       }
+      return '""';
     }
-    return '""';
-  }
-};
+  };
+}
 
 // ===== 配置管理系统 =====
 // 获取用户文档路径函数
 function getUserDocumentsPath() {
   try {
+    // 检查Folder对象是否可用
+    if (typeof Folder === 'undefined') {
+      // 如果Folder对象不可用，尝试使用其他方法
+      if ($.os.indexOf("Windows") !== -1) {
+        return $.getenv("USERPROFILE") + "/Documents";
+      } else if ($.os.indexOf("Mac") !== -1) {
+        return "~/Documents";
+      }
+      return "~/Documents";
+    }
+    
     // Windows系统使用环境变量
     if ($.os.indexOf("Windows") !== -1) {
       var docPath = $.getenv("USERPROFILE") + "/Documents";
@@ -372,7 +385,7 @@ try { // 添加顶层try-catch块来捕获启动错误
         var panelArtboards = topControlsGroup.add("panel", undefined, "选择画板 (勾选添加页码)");
         panelArtboards.orientation = "column";
         panelArtboards.alignChildren = "fill";
-        var artboardList = panelArtboards.add("ListBox", [0,0,250,200], [], {multiselect: true, scrolling: true}); // 扩大列表框
+        var artboardList = panelArtboards.add("ListBox", [0,0,250,350], [], {multiselect: true, scrolling: true}); // 扩大列表框
 
         // 填充画板列表
         var idoc = app.activeDocument;
@@ -388,7 +401,7 @@ try { // 添加顶层try-catch块来捕获启动错误
                         radBindingInner, ddPageDigits, txtFooter);
 
         // --- 页脚内容设置 ---
-        var panelFooter = mainGroup.add("panel", undefined, "页码内容 (可输入文本和变量)");
+        var panelFooter = mainGroup.add("panel", undefined, "页码内容 (下面是一些预设变量，点击即可插入)");
         panelFooter.orientation = "column";
         panelFooter.alignChildren = "fill";
         panelFooter.spacing = 8;
@@ -434,7 +447,7 @@ try { // 添加顶层try-catch块来捕获启动错误
         var btnPreview = actionButtonsGroup.add("button", undefined, "预览页码");
         var btnOk = actionButtonsGroup.add("button", undefined, "生成页码");
         var btnDelete = actionButtonsGroup.add("button", undefined, "删除页码");
-        var btnCancel = actionButtonsGroup.add("button", undefined, "取消");
+        var btnCancel = actionButtonsGroup.add("button", undefined, "关闭脚本");
 
         // --- 按钮事件及辅助函数 ---
 
@@ -834,7 +847,7 @@ try { // 添加顶层try-catch块来捕获启动错误
 
         // 显示关于脚本信息的弹窗
         function showAboutDialog(infoLog, mainWindow) { // 接收主窗口对象
-            var aboutWin = new Window("dialog", "关于添加页码 v2.1");
+            var aboutWin = new Window("dialog", "关于页面 - 使用愉快");
             aboutWin.orientation = "column";
             aboutWin.alignChildren = "center";
             aboutWin.spacing = 15;
@@ -852,14 +865,14 @@ try { // 添加顶层try-catch块来捕获启动错误
             authorNameGroup.orientation = "row";
             authorNameGroup.alignChildren = "center";
             authorNameGroup.add("statictext", undefined, "作者：");
-            authorNameGroup.add("statictext", undefined, "小张");
+            authorNameGroup.add("statictext", undefined, "爱吃馍的小张 | 公众号：爱吃馍");
 
             // 网站 (改为StaticText并添加事件监听)
             var websiteGroup = authorPanel.add("group");
             websiteGroup.orientation = "row";
             websiteGroup.alignChildren = "center";
-            websiteGroup.add("statictext", undefined, "网站：");
-            var stWebsite = websiteGroup.add("statictext", undefined, "https://z-l.top"); // 改为 StaticText
+            websiteGroup.add("statictext", undefined, "网址：");
+            var stWebsite = websiteGroup.add("statictext", undefined, "Z-L.TOP"); // 改为 StaticText
             // 为 StaticText 添加事件监听器
             stWebsite.addEventListener('mousedown', function () {
                 try {
@@ -882,11 +895,11 @@ try { // 添加顶层try-catch块来捕获启动错误
             authorMessageGroup.orientation = "row";
             authorMessageGroup.alignChildren = "center";
             authorMessageGroup.spacing = 5; // 增加间距
-            authorMessageGroup.add("statictext", undefined, "作者留言：欢迎使用，有问题请");
-            var stFeedback = authorMessageGroup.add("statictext", undefined, "留言反馈！"); // 改为 StaticText
+            authorMessageGroup.add("statictext", undefined, "有问题可公众号互动");
+            var stFeedback = authorMessageGroup.add("statictext", undefined, "或点我quicker留言"); // 改为 StaticText
             // 为 StaticText 添加事件监听器
             stFeedback.addEventListener('mousedown', function () {
-                var feedbackURL = "https://getquicker.net/Sharedaction?code=c6c86159-49c3-40ed-9cde-08ddc5acfa0f";
+                var feedbackURL = "https://getquicker.net/Share/Actions/Topics?code=c6c86159-49c3-40ed-9cde-08ddc5acfa0f";
                 openURL(feedbackURL);
                 if (infoLog) {
                     infoLog.text += "已尝试在浏览器中打开留言反馈链接: " + feedbackURL + "\n";
@@ -905,12 +918,12 @@ try { // 添加顶层try-catch块来捕获启动错误
             donatePanel.add("statictext", undefined, "感谢您的支持！您的鼓励是作者更新的动力！");
             donatePanel.add("statictext", undefined, "点击下方按钮将在浏览器中打开支持页面。");
 
-            var btnAboutDonate = donatePanel.add("button", undefined, "点击支持作者 (打开网页)");
+            var btnAboutDonate = donatePanel.add("button", undefined, "好用，赏~ (打开网页)");
             btnAboutDonate.size = [200, 30];
             btnAboutDonate.onClick = function() {
                 try {
                     // 更新赞赏链接，并确保进行 URI 编码
-                    var donateURL = "https://getquicker.net/DonateAuthor?serial=388875&nickname=" + encodeURIComponent("星河城野❤");
+                    var donateURL = "https://getquicker.net/DonateAuthor?serial=388875&nickname=" + encodeURIComponent("爱吃馍的小张");
                     openURL(donateURL); 
                     if (infoLog) {
                         infoLog.text += "已尝试在浏览器中打开支持页面链接: " + donateURL + "\n";
